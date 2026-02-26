@@ -65,6 +65,8 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
         branchPatchProvider = new NpcBranchPatchProvider();
         AVAILABLE_MODELS = new HashSet<>();
         TAGMAP = Maps.newHashMap();
+        // Register HumanoidArmature as default for CustomNPCs (each NPC can override via unique armature)
+        Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, Armatures.BIPED);
         for (Map.Entry<ResourceLocation, JsonElement> entry : objectIn.entrySet()) {
             CompoundTag tag = null;
             try {
@@ -165,6 +167,8 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
 
     @OnlyIn(Dist.CLIENT)
     public static void processServerPacket(SPDatapackSync packet) {
+        // Register HumanoidArmature as default for CustomNPCs (each NPC can override via unique armature)
+        Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, Armatures.BIPED);
         for (CompoundTag tag : packet.getTags()) {
             boolean disabled = false;
             if (tag.contains("disabled"))

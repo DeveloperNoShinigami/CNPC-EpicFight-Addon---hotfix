@@ -1,0 +1,29 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap
+ *  net.minecraft.server.level.ChunkHolder
+ *  net.minecraft.server.level.ChunkMap
+ *  net.minecraft.server.level.PlayerMap
+ *  org.spongepowered.asm.mixin.Mixin
+ *  org.spongepowered.asm.mixin.gen.Accessor
+ */
+package noppes.npcs.mixin;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.PlayerMap;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
+
+@Mixin(value={ChunkMap.class})
+public interface ChunkMapMixin {
+    @Accessor(value="visibleChunkMap")
+    public Long2ObjectLinkedOpenHashMap<ChunkHolder> visibleChunkMap();
+
+    @Accessor(value="playerMap")
+    public PlayerMap playerMap();
+}
+

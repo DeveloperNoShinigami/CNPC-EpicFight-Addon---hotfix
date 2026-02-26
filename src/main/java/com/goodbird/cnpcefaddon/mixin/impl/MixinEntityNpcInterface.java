@@ -3,6 +3,8 @@ package com.goodbird.cnpcefaddon.mixin.impl;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ProjectileWeaponItem;
 import noppes.npcs.entity.EntityNPCInterface;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,11 +21,12 @@ public class MixinEntityNpcInterface extends PathfinderMob {
         super(p_21683_, p_21684_);
     }
 
-    @Inject(method = "addRegularEntries", at=@At("TAIL"), remap = false)
+    @Inject(method = "addRegularEntries", at = @At("TAIL"), remap = false)
     public void addRegularEntries(CallbackInfo ci) {
         LivingEntityPatch<?> patch = EpicFightCapabilities.getEntityPatch(this, LivingEntityPatch.class);
-        if(patch instanceof HumanoidMobPatch){
-            ((HumanoidMobPatch<?>) patch).setAIAsInfantry(this.getMainHandItem().getItem() instanceof net.minecraft.world.item.ProjectileWeaponItem);
+        if (patch instanceof HumanoidMobPatch) {
+            ((HumanoidMobPatch<?>) patch)
+                    .setAIAsInfantry(((LivingEntity) this).getMainHandItem().getItem() instanceof ProjectileWeaponItem);
         }
     }
 }

@@ -1,0 +1,513 @@
+package yesman.epicfight.client.world.capabilites.entitypatch.player;
+
+import java.util.Optional;
+
+import org.joml.Vector4f;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.PlayerRideableJumping;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
+import yesman.epicfight.api.animation.Animator;
+import yesman.epicfight.api.animation.JointTransform;
+import yesman.epicfight.api.animation.LivingMotion;
+import yesman.epicfight.api.animation.LivingMotions;
+import yesman.epicfight.api.animation.Pose;
+import yesman.epicfight.api.animation.property.AnimationProperty.StaticAnimationProperty;
+import yesman.epicfight.api.animation.types.ActionAnimation;
+import yesman.epicfight.api.animation.types.DynamicAnimation;
+import yesman.epicfight.api.client.animation.ClientAnimator;
+import yesman.epicfight.api.client.animation.Layer;
+import yesman.epicfight.api.client.forgeevent.RenderEpicFightPlayerEvent;
+import yesman.epicfight.api.client.forgeevent.UpdatePlayerMotionEvent;
+import yesman.epicfight.client.online.EpicSkins;
+import yesman.epicfight.api.client.physics.cloth.ClothSimulatable;
+import yesman.epicfight.api.client.physics.cloth.ClothSimulator;
+import yesman.epicfight.api.physics.PhysicsSimulator;
+import yesman.epicfight.api.physics.SimulationTypes;
+import yesman.epicfight.api.utils.EntitySnapshot;
+import yesman.epicfight.api.utils.math.MathUtils;
+import yesman.epicfight.api.utils.math.OpenMatrix4f;
+import yesman.epicfight.api.utils.math.Vec3f;
+import yesman.epicfight.config.ClientConfig;
+import yesman.epicfight.gameasset.EpicFightSounds;
+import yesman.epicfight.network.EntityPairingPacketTypes;
+import yesman.epicfight.network.server.SPEntityPairingPacket;
+import yesman.epicfight.particle.EpicFightParticles;
+import yesman.epicfight.world.capabilities.entitypatch.EntityDecorations;
+import yesman.epicfight.world.capabilities.entitypatch.EntityDecorations.RenderAttributeModifier;
+import yesman.epicfight.world.capabilities.entitypatch.player.PlayerPatch;
+import yesman.epicfight.world.capabilities.item.CapabilityItem;
+import yesman.epicfight.world.entity.eventlistener.PlayerEventListener.EventType;
+
+public class AbstractClientPlayerPatch<T extends AbstractClientPlayer> extends PlayerPatch<T> implements ClothSimulatable {
+	private Item prevHeldItem;
+	private Item prevHeldItemOffHand;
+	protected EpicSkins epicSkinsInformation;
+	
+	@Override
+	public void onJoinWorld(T entity, EntityJoinLevelEvent event) {
+		super.onJoinWorld(entity, event);
+		
+		this.prevHeldItem = Items.AIR;
+		this.prevHeldItemOffHand = Items.AIR;
+		
+		EpicSkins.initEpicSkins(this);
+	}
+	
+	@Override
+	public void updateMotion(boolean considerInaction) {
+		if (this.original.getHealth() <= 0.0F) {
+			currentLivingMotion = LivingMotions.DEATH;
+		} else if (!this.state.updateLivingMotion() && considerInaction) {
+			currentLivingMotion = LivingMotions.INACTION;
+		} else {
+			if (original.isFallFlying() || original.isAutoSpinAttack()) {
+				currentLivingMotion = LivingMotions.FLY;
+			} else if (original.getVehicle() != null) {
+				if (original.getVehicle() instanceof PlayerRideableJumping)
+					currentLivingMotion = LivingMotions.MOUNT;
+				else
+					currentLivingMotion = LivingMotions.SIT;
+			} else if (original.isVisuallySwimming()) {
+				currentLivingMotion = LivingMotions.SWIM;
+			} else if (original.isSleeping()) {
+				currentLivingMotion = LivingMotions.SLEEP;
+			} else if (!original.onGround() && original.onClimbable()) {
+				currentLivingMotion = LivingMotions.CLIMB;
+			} else if (!original.getAbilities().flying) {
+				ClientAnimator animator = this.getClientAnimator();
+				
+				if (original.isUnderWater() && (original.getY() - this.yo) < -0.005)
+					currentLivingMotion = LivingMotions.FLOAT;
+				else if (original.getY() - this.yo < -0.4F || this.isAirborneState())
+					currentLivingMotion = LivingMotions.FALL;
+				else if (this.isMoving()) {
+					if (original.isCrouching())
+						currentLivingMotion = LivingMotions.SNEAK;
+					else if (original.isSprinting())
+						currentLivingMotion = LivingMotions.RUN;
+					else
+						currentLivingMotion = LivingMotions.WALK;
+
+					animator.baseLayer.animationPlayer.setReversed(this.dz < 0);
+					
+				} else {
+					animator.baseLayer.animationPlayer.setReversed(false);
+					
+					if (original.isCrouching())
+						currentLivingMotion = LivingMotions.KNEEL;
+					else
+						currentLivingMotion = LivingMotions.IDLE;
+				}
+			} else {
+				if (this.isMoving())
+					currentLivingMotion = LivingMotions.CREATIVE_FLY;
+				else
+					currentLivingMotion = LivingMotions.CREATIVE_IDLE;
+			}
+		}
+		
+		UpdatePlayerMotionEvent.BaseLayer baseLayerEvent = new UpdatePlayerMotionEvent.BaseLayer(this, this.currentLivingMotion, !this.state.updateLivingMotion() && considerInaction);
+		this.eventListeners.triggerEvents(EventType.UPDATE_BASE_LIVING_MOTION_EVENT, baseLayerEvent);
+		MinecraftForge.EVENT_BUS.post(baseLayerEvent);
+		
+		this.currentLivingMotion = baseLayerEvent.getMotion();
+		
+		if (!this.state.updateLivingMotion() && considerInaction) {
+			this.currentCompositeMotion = LivingMotions.NONE;
+		} else {
+			CapabilityItem mainhandItemCap = this.getHoldingItemCapability(InteractionHand.MAIN_HAND);
+			CapabilityItem offhandItemCap = this.getHoldingItemCapability(InteractionHand.OFF_HAND);
+			LivingMotion customLivingMotion = mainhandItemCap.getLivingMotion(this, InteractionHand.MAIN_HAND);
+			
+			if (customLivingMotion == null) customLivingMotion = offhandItemCap.getLivingMotion(this, InteractionHand.OFF_HAND);
+			
+			// When item capabilities has custom living motion
+			if (customLivingMotion != null) 
+				currentCompositeMotion = customLivingMotion;
+			else if (this.original.isUsingItem()) {
+                    UseAnim useAnim = this.original.getUseItem().getUseAnimation();
+                if (useAnim == UseAnim.BLOCK)
+                	currentCompositeMotion = LivingMotions.BLOCK_SHIELD;
+                else if (useAnim == UseAnim.CROSSBOW)
+					currentCompositeMotion = LivingMotions.RELOAD;
+				else if (useAnim == UseAnim.DRINK)
+					currentCompositeMotion = LivingMotions.DRINK;
+				else if (useAnim == UseAnim.EAT)
+					currentCompositeMotion = LivingMotions.EAT;
+				else if (useAnim == UseAnim.SPYGLASS)
+					currentCompositeMotion = LivingMotions.SPECTATE;
+				else
+					currentCompositeMotion = currentLivingMotion;
+			} else {
+				if (this.getClientAnimator().getCompositeLayer(Layer.Priority.MIDDLE).animationPlayer.getRealAnimation().get().isReboundAnimation())
+					currentCompositeMotion = LivingMotions.SHOT;
+				else if (this.original.swinging && this.original.getSleepingPos().isEmpty())
+					currentCompositeMotion = LivingMotions.DIGGING;
+				else
+					currentCompositeMotion = currentLivingMotion;
+			}
+			
+			UpdatePlayerMotionEvent.CompositeLayer compositeLayerEvent = new UpdatePlayerMotionEvent.CompositeLayer(this, this.currentCompositeMotion);
+			this.eventListeners.triggerEvents(EventType.UPDATE_COMPOSITE_LIVING_MOTION_EVENT, compositeLayerEvent);
+			MinecraftForge.EVENT_BUS.post(compositeLayerEvent);
+			
+			this.currentCompositeMotion = compositeLayerEvent.getMotion();
+		}
+	}
+	
+	@Override
+	public void onOldPosUpdate() {
+		this.modelYRotO2 = this.modelYRotO;
+		this.xPosO2 = (float)this.original.xOld;
+		this.yPosO2 = (float)this.original.yOld;
+		this.zPosO2 = (float)this.original.zOld;
+	}
+	
+	@Override
+	protected void clientTick(LivingEvent.LivingTickEvent event) {
+		this.xCloakO2 = this.original.xCloakO;
+		this.yCloakO2 = this.original.yCloakO;
+		this.zCloakO2 = this.original.zCloakO;
+		
+		super.clientTick(event);
+		
+		if (!this.getEntityState().updateLivingMotion()) {
+			this.original.yBodyRot = this.original.yHeadRot;
+		}
+		
+		boolean isMainHandChanged = this.prevHeldItem != this.original.getInventory().getSelected().getItem();
+		boolean isOffHandChanged = this.prevHeldItemOffHand != this.original.getInventory().offhand.get(0).getItem();
+
+		if (isMainHandChanged || isOffHandChanged) {
+			this.updateHeldItem(this.getHoldingItemCapability(InteractionHand.MAIN_HAND), this.getHoldingItemCapability(InteractionHand.OFF_HAND));
+			
+			if (isMainHandChanged) {
+				this.prevHeldItem = this.original.getInventory().getSelected().getItem();
+			}
+			
+			if (isOffHandChanged) {
+				this.prevHeldItemOffHand = this.original.getInventory().offhand.get(0).getItem();
+			}
+		}
+		
+		/** {@link LivingDeathEvent} never fired for client players **/
+		if (this.original.deathTime == 1) {
+			this.getClientAnimator().playDeathAnimation();
+		}
+		
+		this.clothSimulator.tick(this);
+	}
+	
+	protected boolean isMoving() {
+		return Math.abs(this.dx) > 0.01F || Math.abs(this.dz) > 0.01F;
+	}
+	
+	public void updateHeldItem(CapabilityItem mainHandCap, CapabilityItem offHandCap) {
+		this.cancelItemUse();
+		
+		this.getClientAnimator().iterAllLayers((layer) -> {
+			if (layer.isOff()) {
+				return;
+			}
+			
+			layer.animationPlayer.getRealAnimation().get().getProperty(StaticAnimationProperty.ON_ITEM_CHANGE_EVENT).ifPresent((event) -> {
+				event.params(mainHandCap, offHandCap);
+				event.execute(this, layer.animationPlayer.getRealAnimation(), layer.animationPlayer.getPrevElapsedTime(), layer.animationPlayer.getElapsedTime());
+			});
+		});
+	}
+	
+	@Override
+	public void entityPairing(SPEntityPairingPacket packet) {
+		super.entityPairing(packet);
+		
+		if (packet.getPairingPacketType().is(EntityPairingPacketTypes.class)) {
+			switch (packet.getPairingPacketType().toEnum(EntityPairingPacketTypes.class)) {
+			case TECHNICIAN_ACTIVATED -> {
+				this.original.level().addParticle(EpicFightParticles.WHITE_AFTERIMAGE.get(), this.original.getX(), this.original.getY(), this.original.getZ(), Double.longBitsToDouble(this.original.getId()), 0, 0);
+			}
+			case ADRENALINE_ACTIVATED -> {
+				if (this.original.isLocalPlayer()) {
+					Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(EpicFightSounds.ADRENALINE.get(), 1.0F, 1.0F));
+				} else {
+					this.original.playSound(EpicFightSounds.ADRENALINE.get());
+				}
+				
+				this.original.level().addParticle(EpicFightParticles.ADRENALINE_PLAYER_BEATING.get(), this.original.getX(), this.original.getY(), this.original.getZ(), Double.longBitsToDouble(this.original.getId()), 0, 0);
+			}
+			case EMERGENCY_ESCAPE_ACTIVATED -> {
+				float yRot = packet.getBuffer().readFloat();
+				this.original.level().addParticle(EpicFightParticles.AIR_BURST.get(), this.original.getX(), this.original.getY() + this.original.getBbHeight() * 0.5F, this.original.getZ(), 90.0F, yRot, 0);
+				
+				this.entityDecorations.addColorModifier(EntityDecorations.EMERGENCY_ESCAPE_TRANSPARENCY_MODIFIER, new RenderAttributeModifier<> () {
+					private int tickCount;
+					
+					@Override
+					public void modifyValue(Vector4f val, float partialTick) {
+						val.w = (float)Math.pow((this.tickCount + partialTick) / 6.0D, 2.0D) - 0.4F;
+					}
+					
+					@Override
+					public boolean shouldRemove() {
+						return this.tickCount > 6;
+					}
+					
+					@Override
+					public void tick() {
+						++this.tickCount;
+					}
+				});
+			}
+			}
+		}
+	}
+	
+	@Override
+	public boolean overrideRender() {
+		RenderEpicFightPlayerEvent renderepicfightplayerevent = new RenderEpicFightPlayerEvent(this, !ClientConfig.enableOriginalModel || this.isEpicFightMode());
+		MinecraftForge.EVENT_BUS.post(renderepicfightplayerevent);
+		return renderepicfightplayerevent.getShouldRender();
+	}
+	
+	@Override
+	public boolean shouldMoveOnCurrentSide(ActionAnimation actionAnimation) {
+		return false;
+	}
+	
+	@Override
+	public void poseTick(DynamicAnimation animation, Pose pose, float elapsedTime, float partialTick) {
+		if (pose.hasTransform("Head") && this.armature.hasJoint("Head")) {
+			if (animation.doesHeadRotFollowEntityHead()) {
+				float headRelativeRot = Mth.rotLerp(partialTick, Mth.wrapDegrees(this.modelYRotO - this.original.yHeadRotO), Mth.wrapDegrees(this.modelYRot - this.original.yHeadRot));
+				OpenMatrix4f headTransform = this.armature.getBoundTransformFor(pose, this.armature.searchJointByName("Head"));
+				OpenMatrix4f toOriginalRotation = headTransform.removeScale().removeTranslation().invert();
+				Vec3f xAxis = OpenMatrix4f.transform3v(toOriginalRotation, Vec3f.X_AXIS, null);
+				Vec3f yAxis = OpenMatrix4f.transform3v(toOriginalRotation, Vec3f.Y_AXIS, null);
+				OpenMatrix4f headRotation = OpenMatrix4f.createRotatorDeg(headRelativeRot, yAxis).rotateDeg(-Mth.rotLerp(partialTick, this.original.xRotO, this.original.getXRot()), xAxis);
+				pose.orElseEmpty("Head").frontResult(JointTransform.fromMatrix(headRotation), OpenMatrix4f::mul);
+			}
+		}
+	}
+	
+	@Override
+	public OpenMatrix4f getModelMatrix(float partialTick) {
+		if (this.original.isAutoSpinAttack()) {
+			OpenMatrix4f mat = MathUtils.getModelMatrixIntegral(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0, 0, 0, 0, partialTick, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
+			float yRot = MathUtils.lerpBetween(this.original.yRotO, this.original.getYRot(), partialTick);
+			float xRot = MathUtils.lerpBetween(this.original.xRotO, this.original.getXRot(), partialTick);
+			
+			mat.rotateDeg(-yRot, Vec3f.Y_AXIS)
+			   .rotateDeg(-xRot, Vec3f.X_AXIS)
+			   .rotateDeg((this.original.tickCount + partialTick) * -55.0F, Vec3f.Z_AXIS)
+			   .translate(0F, -0.39F, 0F);
+			
+			return mat;
+		} else if (this.original.isFallFlying()) {
+			OpenMatrix4f mat = MathUtils.getModelMatrixIntegral(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0, 0, 0, 0, partialTick, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
+            float f1 = (float)this.original.getFallFlyingTicks() + partialTick;
+            float f2 = Mth.clamp(f1 * f1 / 100.0F, 0.0F, 1.0F);
+            
+            mat.rotateDeg(-Mth.rotLerp(partialTick, this.original.yBodyRotO, this.original.yBodyRot), Vec3f.Y_AXIS).rotateDeg(f2 * (-this.original.getXRot()), Vec3f.X_AXIS);
+            
+            Vec3 vec3d = this.original.getViewVector(partialTick);
+            Vec3 vec3d1 = this.original.getDeltaMovementLerped(partialTick);
+            double d0 = vec3d1.horizontalDistanceSqr();
+            double d1 = vec3d.horizontalDistanceSqr();
+            
+			if (d0 > 0.0D && d1 > 0.0D) {
+                double d2 = (vec3d1.x * vec3d.x + vec3d1.z * vec3d.z) / (Math.sqrt(d0) * Math.sqrt(d1));
+                double d3 = vec3d1.x * vec3d.z - vec3d1.z * vec3d.x;
+                mat.rotate((float)-((Math.signum(d3) * Math.acos(d2))), Vec3f.Z_AXIS);
+            }
+			
+			return mat;
+			
+		} else if (this.original.isSleeping()) {
+			BlockState blockstate = this.original.getFeetBlockState();
+			float yRot = 0.0F;
+			
+			if (blockstate.isBed(this.original.level(), this.original.getSleepingPos().orElse(null), this.original)) {
+				if (blockstate.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            		switch(blockstate.getValue(BlockStateProperties.HORIZONTAL_FACING)) {
+            		case EAST:
+        				yRot = 90.0F;
+        				break;
+        			case WEST:
+        				yRot = -90.0F;
+        				break;
+        			case SOUTH:
+        				yRot = 180.0F;
+        				break;
+        			default:
+        				break;
+            		}
+            	}
+			}
+			
+			return MathUtils.getModelMatrixIntegral(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, yRot, yRot, 0, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
+		} else {
+			float yRotO;
+			float yRot;
+			float xRotO = 0;
+			float xRot = 0;
+			
+			if (this.original.getVehicle() instanceof LivingEntity ridingEntity) {
+				yRotO = ridingEntity.yBodyRotO;
+				yRot = ridingEntity.yBodyRot;
+			} else {
+				yRotO = this.modelYRotO;
+				yRot = this.modelYRot;
+			}
+			
+			if (!this.getEntityState().inaction() && this.original.getPose() == net.minecraft.world.entity.Pose.SWIMMING) {
+				float f = this.original.getSwimAmount(partialTick);
+				float f3 = this.original.isInWater() ? this.original.getXRot() : 0;
+		        float f4 = Mth.lerp(f, 0.0F, f3);
+		        xRotO = f4;
+		        xRot = f4;
+			}
+			
+			return MathUtils.getModelMatrixIntegral(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, xRotO, xRot, yRotO, yRot, partialTick, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
+		}
+	}
+	
+	public void setEpicSkinsInformation(EpicSkins epicSkinsInformation) {
+		this.epicSkinsInformation = epicSkinsInformation;
+	}
+	
+	public EpicSkins getEpicSkinsInformation() {
+		return this.epicSkinsInformation;
+	}
+	
+	public boolean isEpicSkinsLoaded() {
+		return this.epicSkinsInformation != null;
+	}
+	
+	@Override
+	public EntitySnapshot<?> captureEntitySnapshot() {
+		return EntitySnapshot.capturePlayer(this);
+	}
+	
+	private final ClothSimulator clothSimulator = new ClothSimulator();
+	public float modelYRotO2;
+	public double xPosO2;
+	public double yPosO2;
+	public double zPosO2;
+	public double xCloakO2;
+	public double yCloakO2;
+	public double zCloakO2;
+	
+	@SuppressWarnings("unchecked")
+	@Override
+	public <SIM extends PhysicsSimulator<?, ?, ?, ?, ?>> Optional<SIM> getSimulator(SimulationTypes<?, ?, ?, ?, ?, SIM> simulationType) {
+		if (simulationType == SimulationTypes.CLOTH) {
+			return Optional.of((SIM)this.clothSimulator);
+		}
+		
+		return Optional.empty();
+	}
+	
+	@Override
+	public ClothSimulator getClothSimulator() {
+		return this.clothSimulator;
+	}
+	
+	@Override
+	public Vec3 getAccurateCloakLocation(float partialFrame) {
+		if (partialFrame < 0.0F) {
+			partialFrame = 1.0F - partialFrame;
+			
+			double x = Mth.lerp((double)partialFrame, this.xCloakO2, this.original.xCloakO) - Mth.lerp((double)partialFrame, this.xPosO2, this.original.xo);
+            double y = Mth.lerp((double)partialFrame, this.yCloakO2, this.original.yCloakO) - Mth.lerp((double)partialFrame, this.yPosO2, this.original.yo);
+            double z = Mth.lerp((double)partialFrame, this.zCloakO2, this.original.zCloakO) - Mth.lerp((double)partialFrame, this.zPosO2, this.original.zo);
+			
+            return new Vec3(x, y, z);
+		} else {
+			double x = Mth.lerp((double)partialFrame, this.original.xCloakO, this.original.xCloak) - Mth.lerp((double)partialFrame, this.original.xo, this.original.getX());
+            double y = Mth.lerp((double)partialFrame, this.original.yCloakO, this.original.yCloak) - Mth.lerp((double)partialFrame, this.original.yo, this.original.getY());
+            double z = Mth.lerp((double)partialFrame, this.original.zCloakO, this.original.zCloak) - Mth.lerp((double)partialFrame, this.original.zo, this.original.getZ());
+			
+			return new Vec3(x, y, z);
+		}
+	}
+	
+	@Override
+	public Vec3 getAccuratePartialLocation(float partialFrame) {
+		if (partialFrame < 0.0F) {
+			partialFrame = 1.0F + partialFrame;
+			
+			double x = Mth.lerp((double)partialFrame, this.xPosO2, this.original.xOld);
+			double y = Mth.lerp((double)partialFrame, this.yPosO2, this.original.yOld);
+			double z = Mth.lerp((double)partialFrame, this.zPosO2, this.original.zOld);
+			
+            return new Vec3(x, y, z);
+		} else {
+			double x = Mth.lerp((double)partialFrame, this.original.xOld, this.original.getX());
+			double y = Mth.lerp((double)partialFrame, this.original.yOld, this.original.getY());
+			double z = Mth.lerp((double)partialFrame, this.original.zOld, this.original.getZ());
+			
+			return new Vec3(x, y, z);
+		}
+	}
+	
+	@Override
+	public Vec3 getObjectVelocity() {
+		return new Vec3(this.original.getX() - this.original.xOld, this.original.getY() - this.original.yOld, this.original.getZ() - this.original.zOld);
+	}
+	
+	@Override
+	public float getAccurateYRot(float partialFrame) {
+		if (partialFrame < 0.0F) {
+			partialFrame = 1.0F + partialFrame;
+			
+            return Mth.rotLerp(partialFrame, this.modelYRotO2, this.getYRotO());
+		} else {
+			return Mth.rotLerp(partialFrame, this.getYRotO(), this.getYRot());
+		}
+	}
+	
+	@Override
+	public float getYRotDelta(float partialFrame) {
+		if (partialFrame < 0.0F) {
+			partialFrame = 1.0F + partialFrame;
+			
+            return Mth.rotLerp(partialFrame, this.modelYRotO2, this.getYRotO()) - this.modelYRotO2;
+		} else {
+			return Mth.rotLerp(partialFrame, this.getYRotO(), this.getYRot()) - this.getYRotO();
+		}
+	}
+
+	@Override
+	public boolean invalid() {
+		return this.original.isRemoved();
+	}
+
+	@Override
+	public float getScale() {
+		return PLAYER_SCALE;
+	}
+
+	@Override
+	public Animator getSimulatableAnimator() {
+		return this.animator;
+	}
+
+	@Override
+	public float getGravity() {
+		return this.getOriginal().isUnderWater() ? 0.98F : 9.8F;
+	}
+}

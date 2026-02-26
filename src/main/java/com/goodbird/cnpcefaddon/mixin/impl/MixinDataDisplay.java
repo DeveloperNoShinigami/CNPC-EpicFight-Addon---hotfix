@@ -32,18 +32,20 @@ public class MixinDataDisplay implements IDataDisplay {
 
     @Inject(method = "save", at = @At("HEAD"), remap = false)
     public void writeToNBT(CompoundTag nbttagcompound, CallbackInfoReturnable<CompoundTag> cir) {
-        if(hasEFModel())
+        if (hasEFModel())
             nbttagcompound.putString("efModel", cNPC_EpicFight_Addon$efModelResLoc.toString());
     }
 
     @Inject(method = "readToNBT", at = @At("HEAD"), remap = false)
-    public void readFromNBT(CompoundTag nbttagcompound, CallbackInfo ci){
-        if(nbttagcompound.contains("efModel")){
+    public void readFromNBT(CompoundTag nbttagcompound, CallbackInfo ci) {
+        if (nbttagcompound.contains("efModel")) {
             cNPC_EpicFight_Addon$efModelResLoc = new ResourceLocation(nbttagcompound.getString("efModel"));
             cNPC_EpicFight_Addon$updateModelCap();
-            if(npc.isKilled()) {
+            if (npc.isKilled()) {
                 LivingEntityPatch<?> patch = EpicFightCapabilities.getEntityPatch(npc, LivingEntityPatch.class);
-                patch.onDeath(new LivingDeathEvent(npc, npc.damageSources().generic()));
+                if (patch != null) {
+                    patch.onDeath(new LivingDeathEvent(npc, npc.level().damageSources().generic()));
+                }
             }
         }
     }
@@ -51,44 +53,47 @@ public class MixinDataDisplay implements IDataDisplay {
     @Override
     public void setEFModel(ResourceLocation modelPath, boolean server) {
         cNPC_EpicFight_Addon$efModelResLoc = modelPath;
-        if(server) {
+        if (server) {
             cNPC_EpicFight_Addon$updateModelCap();
             npc.updateClient();
         }
     }
 
     @Unique
-    public ResourceLocation getEFModel(){
+    public ResourceLocation getEFModel() {
         return cNPC_EpicFight_Addon$efModelResLoc;
     }
 
     @Unique
     public boolean hasEFModel() {
-        return cNPC_EpicFight_Addon$efModelResLoc !=null;
+        return cNPC_EpicFight_Addon$efModelResLoc != null;
     }
 
     @Unique
-    private void cNPC_EpicFight_Addon$updateModelCap(){
-        ICapabilityProvider[] caps = ((IMixinCapabilityDispatcher)(Object)((MixinCapabilityProvider)npc).invokeGetCapabilities()).getCaps();
+    private void cNPC_EpicFight_Addon$updateModelCap() {
+        ICapabilityProvider[] caps = ((IMixinCapabilityDispatcher) (Object) ((com.goodbird.cnpcefaddon.mixin.impl.MixinCapabilityProvider) (Object) npc)
+                .invokeGetCapabilities()).getCaps();
         EntityPatchProvider newProvider = new EntityPatchProvider(npc);
-        if(newProvider.get()==null) return;
-        ((EntityPatch)newProvider.get()).onConstructed(npc);
-        ((EntityPatch)newProvider.get()).onJoinWorld(npc, new EntityJoinLevelEvent(npc,npc.level()));
-        if(newProvider.hasCapability()){
+        if (newProvider.get() == null)
+            return;
+        ((EntityPatch) newProvider.get()).onConstructed(npc);
+        ((EntityPatch) newProvider.get()).onJoinWorld(npc, new EntityJoinLevelEvent(npc, npc.level()));
+        if (newProvider.hasCapability()) {
             boolean hasFoundAny = false;
-            for(int i = 0; i<caps.length; i++){
-                if(caps[i] instanceof EntityPatchProvider){
+            for (int i = 0; i < caps.length; i++) {
+                if (caps[i] instanceof EntityPatchProvider) {
                     caps[i] = newProvider;
                     hasFoundAny = true;
                     break;
                 }
             }
-            if(!hasFoundAny){
-                ICapabilityProvider[] newCaps = new ICapabilityProvider[caps.length+1];
+            if (!hasFoundAny) {
+                ICapabilityProvider[] newCaps = new ICapabilityProvider[caps.length + 1];
                 System.arraycopy(caps, 0, newCaps, 0, caps.length);
                 newCaps[caps.length] = newProvider;
-                ((IMixinCapabilityDispatcher)(Object)((MixinCapabilityProvider)npc).invokeGetCapabilities()).setCaps(newCaps);
+                ((IMixinCapabilityDispatcher) (Object) ((MixinCapabilityProvider) npc).invokeGetCapabilities())
+                        .setCaps(newCaps);
             }
-        } //TODO remove one
+        } // TODO remove one
     }
 }

@@ -3,6 +3,7 @@ package com.goodbird.cnpcefaddon.mixin.impl;
 import com.mojang.datafixers.util.Pair;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import yesman.epicfight.api.animation.AnimationManager.AnimationAccessor;
 import yesman.epicfight.api.animation.LivingMotion;
 import yesman.epicfight.api.animation.types.StaticAnimation;
 import yesman.epicfight.api.data.reloader.MobPatchReloadListener;
@@ -20,5 +21,6 @@ public interface ICustomHumanoidMobPatchProvider {
     void setHumanoidCombatBehaviors(Map<WeaponCategory, Map<Style, CombatBehaviors.Builder<HumanoidMobPatch<?>>>> map);
 
     @Accessor(remap = false)
-    void setHumanoidWeaponMotions(Map<WeaponCategory, Map<Style, Set<Pair<LivingMotion, StaticAnimation>>>> map);
+    void setHumanoidWeaponMotions(
+            Map<WeaponCategory, Map<Style, Set<Pair<LivingMotion, AnimationAccessor<? extends StaticAnimation>>>>> map);
 }

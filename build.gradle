@@ -150,9 +150,9 @@ dependencies {
     // The userdev artifact is a special name and will get all sorts of transformations applied to it.
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.20'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
-    implementation fg.deobf('lib:CustomNPCs:1.20.1-GBPort-Unofficial-20240709')
-    implementation fg.deobf('lib:EpicFight:20.7.4')
-    implementation fg.deobf('lib:indestructible:20.6.7')
+    implementation fg.deobf('lib:CustomNPCs:1.20.1-GBPort-Unofficial-20251031')
+    implementation fg.deobf('lib:epic-fight:20.14.10-mc1.20.1-forge')
+    // implementation fg.deobf('lib:indestructible:20.6.7')
     //compile group: 'com.h2database', name: 'h2', version: '1.4.200'
     //extraLibs group: 'com.h2database', name: 'h2', version: '1.4.200'
     //configurations.compile.extendsFrom(configurations.extraLibs)

@@ -1,7 +1,6 @@
 package com.goodbird.cnpcefaddon.common.network;
 
 import com.goodbird.cnpcefaddon.common.NpcPatchReloadListener;
-import com.nameless.indestructible.data.AdvancedMobpatchReloader;
 import java.util.function.Supplier;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -30,7 +29,7 @@ public class SPDatapackSync {
     public static SPDatapackSync fromBytes(FriendlyByteBuf buf) {
         SPDatapackSync msg = new SPDatapackSync(buf.readInt());
 
-        for(int i = 0; i < msg.count; ++i) {
+        for (int i = 0; i < msg.count; ++i) {
             msg.tags[i] = buf.readNbt();
         }
 
@@ -42,7 +41,7 @@ public class SPDatapackSync {
         CompoundTag[] var2 = msg.tags;
         int var3 = var2.length;
 
-        for(int var4 = 0; var4 < var3; ++var4) {
+        for (int var4 = 0; var4 < var3; ++var4) {
             CompoundTag tag = var2[var4];
             buf.writeNbt(tag);
         }

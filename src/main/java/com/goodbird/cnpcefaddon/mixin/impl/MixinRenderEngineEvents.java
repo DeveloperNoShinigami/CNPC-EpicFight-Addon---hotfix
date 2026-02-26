@@ -7,14 +7,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import yesman.epicfight.client.events.engine.RenderEngine;
-import yesman.epicfight.config.ConfigManager;
+import yesman.epicfight.config.ClientConfig;
 
 @Mixin(RenderEngine.Events.class)
 public class MixinRenderEngineEvents {
 
     @Inject(method = "renderHand", at = @At("HEAD"), cancellable = true, remap = false)
     private static void renderHand(RenderHandEvent event, CallbackInfo ci) {
-        if(!((IClientConfig) ConfigManager.INGAME_CONFIG).isFPRenderEnabled()){
+        if (!ClientConfig.enableAnimatedFirstPersonModel) {
             ci.cancel();
         }
     }

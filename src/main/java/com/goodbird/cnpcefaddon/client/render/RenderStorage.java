@@ -22,7 +22,8 @@ public class RenderStorage {
         } else {
             EntityType<?> presetEntityType = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation(renderer));
             if (renderEngine.getEntityRendererProvider().containsKey(presetEntityType)) {
-                renderersMap.put(resourceLocation, renderEngine.getEntityRendererProvider().get(presetEntityType).get());
+                // Updated: Function.apply() instead of Supplier.get()
+                renderersMap.put(resourceLocation, renderEngine.getEntityRendererProvider().get(presetEntityType).apply(presetEntityType));
             } else {
                 throw new IllegalArgumentException("Datapack Mob Patch Crash: Invalid Renderer type " + renderer);
             }

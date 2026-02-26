@@ -24,20 +24,20 @@ public class MixinGuiCreationEntities extends GuiCreationScreenInterface {
         super(null);
     }
 
-    @Inject(method = "init",at = @At("TAIL"))
-    public void init(CallbackInfo ci){
+    @Inject(method = "init", at = @At("TAIL"))
+    public void init(CallbackInfo ci) {
         Vector<String> list = new Vector<>();
-        for(ResourceLocation resLoc : NpcPatchReloadListener.AVAILABLE_MODELS){
+        for (ResourceLocation resLoc : NpcPatchReloadListener.AVAILABLE_MODELS) {
             list.add(resLoc.toString());
         }
         String curName = "Select Config";
-        if(((IDataDisplay)npc.display).hasEFModel()){
-            curName = ((IDataDisplay)npc.display).getEFModel().toString();
+        if (((IDataDisplay) npc.display).hasEFModel()) {
+            curName = ((IDataDisplay) npc.display).getEFModel().toString();
         }
-        addLabel(new GuiLabel(312,"EpicFight Config:", this.guiLeft + 124, this.guiTop - 21,0xffffff));
+        addLabel(new GuiLabel(312, "EpicFight Config:", this.guiLeft + 124, this.guiTop - 21, 0xffffff));
         this.addButton(new GuiButtonNop(this, 302, this.guiLeft + 230, this.guiTop - 27, 150, 20, curName, (b) -> {
             setSubGui(new GuiStringSelection(this, "Selecting epicfight config:", list, name -> {
-                ((IDataDisplay)npc.display).setEFModel(new ResourceLocation(name), false);
+                ((IDataDisplay) npc.display).setEFModel(new ResourceLocation(name), false);
                 getButton(302).setDisplayText(name);
             }));
         }));
@@ -45,7 +45,7 @@ public class MixinGuiCreationEntities extends GuiCreationScreenInterface {
 
     @Override
     public void drawNpc(GuiGraphics graphics, LivingEntity entity, int x, int y, float zoomed, int rotation) {
-        if(wrapper.subgui==null) {
+        if (wrapper.subgui == null) {
             super.drawNpc(graphics, entity, x, y, zoomed, rotation);
         }
     }

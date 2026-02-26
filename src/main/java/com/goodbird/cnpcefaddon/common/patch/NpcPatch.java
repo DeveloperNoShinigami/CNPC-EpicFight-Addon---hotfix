@@ -25,15 +25,9 @@ public class NpcPatch<T extends PathfinderMob> extends CustomMobPatch<T> impleme
     }
 
     public void onConstructed(T entityIn) {
-        this.original = entityIn;
+        super.onConstructed(entityIn);
+        // Override armature with CNPC's unique armature instead of default
         this.armature = provider.armature.deepCopy();
-        this.animator = EpicFightSharedConstants.getAnimator(this);
-        if (!this.original.getEntityData().hasItem(STUN_SHIELD)) {
-            this.original.getEntityData().define(STUN_SHIELD, Float.valueOf(0.0F));
-            this.original.getEntityData().define(MAX_STUN_SHIELD, Float.valueOf(0.0F));
-            this.original.getEntityData().define(EXECUTION_RESISTANCE, Integer.valueOf(1));
-            this.original.getEntityData().define(AIRBORNE, Boolean.valueOf(false));
-        }
     }
 
     public OpenMatrix4f getModelMatrix(float partialTicks) {

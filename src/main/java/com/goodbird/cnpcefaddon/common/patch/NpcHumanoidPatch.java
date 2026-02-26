@@ -5,6 +5,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.item.ItemStack;
 import noppes.npcs.entity.EntityNPCInterface;
+import yesman.epicfight.api.model.Armature;
 import yesman.epicfight.api.utils.math.OpenMatrix4f;
 import yesman.epicfight.gameasset.Armatures;
 import yesman.epicfight.main.EpicFightSharedConstants;
@@ -38,7 +39,7 @@ public class NpcHumanoidPatch<T extends PathfinderMob> extends CustomHumanoidMob
     }
 
     @Override
-    public Armature getArmature() {
-        return this.armature;
+    public HumanoidArmature getArmature() {
+        return (HumanoidArmature) this.armature;
     }
 }

@@ -39,4 +39,9 @@ public class NpcPatch<T extends PathfinderMob> extends CustomMobPatch<T> impleme
         float scale = ((EntityNPCInterface) original).display.getSize() / 5f;
         return super.getModelMatrix(partialTicks).scale(scale, scale, scale);
     }
+
+    @Override
+    public Armature getArmature() {
+        return this.armature;
+    }
 }

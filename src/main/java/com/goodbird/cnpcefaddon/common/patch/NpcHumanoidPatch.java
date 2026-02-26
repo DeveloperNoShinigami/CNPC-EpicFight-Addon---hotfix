@@ -36,4 +36,9 @@ public class NpcHumanoidPatch<T extends PathfinderMob> extends CustomHumanoidMob
         float scale = ((EntityNPCInterface) original).display.getSize() / 5f;
         return super.getModelMatrix(partialTicks).scale(scale, scale, scale);
     }
+
+    @Override
+    public Armature getArmature() {
+        return this.armature;
+    }
 }

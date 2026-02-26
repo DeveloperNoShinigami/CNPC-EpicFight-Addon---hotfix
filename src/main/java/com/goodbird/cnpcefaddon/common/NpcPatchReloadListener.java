@@ -129,7 +129,12 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
                     humanoid ? yesman.epicfight.model.armature.HumanoidArmature::new : Armature::new).get();
             ((INpcPatchProvider) provider).setArmature(armature);
         }
-        Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, Armatures.BIPED);
+        Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, patch -> {
+            if (patch instanceof INpcPatch) {
+                return ((INpcPatch) patch).getArmature().deepCopy();
+            }
+            return Armatures.getRegistry(patch.getOriginal().getType()).apply(patch).deepCopy();
+        });
         List<Pair<LivingMotion, AnimationAccessor<? extends yesman.epicfight.api.animation.types.StaticAnimation>>> defaultAnimations =
                 MobPatchReloadListener.deserializeDefaultAnimations(tag.getCompound("default_livingmotions"));
         npcPatchProvider.setDefaultAnimations(defaultAnimations);
@@ -206,7 +211,12 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
                             .get();
                     ((INpcPatchProvider) provider).setArmature(armature);
                 }
-                Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, Armatures.BIPED);
+                Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, patch -> {
+                    if (patch instanceof INpcPatch) {
+                        return ((INpcPatch) patch).getArmature().deepCopy();
+                    }
+                    return Armatures.getRegistry(patch.getOriginal().getType()).apply(patch).deepCopy();
+                });
                 RenderStorage.registerRenderer(key,
                         tag.contains("preset") ? tag.getString("preset") : tag.getString("renderer"));
             }

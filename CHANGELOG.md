@@ -1,8 +1,10 @@
 # CNPC EpicFight Addon — Changelog
 
-## [Unreleased / hotfix] — 2026-04-24
+## [Unreleased / hotfix] — 2026-05-06
 
 ### Fixed
+- **Living animations not applying on world rejoin / patch swap**: Restored deferred cap-replacement on the client (`Minecraft.getInstance().execute(...)`) so `updateModelCap()` runs after the entity is fully in the world, giving the correct `NpcHumanoidPatch` or `AdvNpcHumanoidPatch` instead of a `NullPatch`.
+- **Client crash (`NPE: nextAnimation is null`) with deferred patch construction**: `NpcHumanoidPatch` now overrides `initAnimator` to seed always-valid zombie fallback animations (`Animations.ZOMBIE_IDLE/WALK/CHASE`) before adding datapack-provided animations. `ClientAnimator.addLivingAnimation` silently skips null/empty accessors (e.g. if an `epicfightx` animation isn't registered yet at patch-construction time), which previously left `livingAnimations` without an IDLE entry, causing `ClientAnimator.postInit()` to NPE. The fallbacks guarantee IDLE is always present; datapack animations override them once loaded.
 - Resolved EFI-Unofficial flatDir dependency coordinate mismatch (`20.14.16-unofficial` → `20.14.16`) so `runClient` and all Gradle builds resolve cleanly.
 - NPC model resizing now works correctly in-game.
 

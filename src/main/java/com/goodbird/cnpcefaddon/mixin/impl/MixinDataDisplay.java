@@ -2,6 +2,7 @@ package com.goodbird.cnpcefaddon.mixin.impl;
 
 import com.goodbird.cnpcefaddon.mixin.IDataDisplay;
 import com.goodbird.cnpcefaddon.mixin.IMixinCapabilityDispatcher;
+import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.damagesource.DamageSource;
@@ -40,7 +41,27 @@ public class MixinDataDisplay implements IDataDisplay {
     public void readFromNBT(CompoundTag nbttagcompound, CallbackInfo ci) {
         if (nbttagcompound.contains("efModel")) {
             cNPC_EpicFight_Addon$efModelResLoc = new ResourceLocation(nbttagcompound.getString("efModel"));
-            cNPC_EpicFight_Addon$updateModelCap();
+            // On the client during readSpawnData: EF's AttachCapabilitiesEvent has already
+            // fired without the efModel set, so the entity has a NullPatch. We must replace
+            // it with the real patch, but we can't call updateModelCap() synchronously here
+            // because the entity's position in the level may not be finalised yet.
+            // Defer via execute() so it runs after the current tick completes and the entity
+            // is fully in the world. NpcHumanoidPatch.initAnimator seeds zombie fallback
+            // animations so ClientAnimator.postInit() never NPEs even on first construction.
+            if (cNPC_EpicFight_Addon$isClientReadingSpawnData()) {
+                Minecraft.getInstance().execute(() -> {
+                    if (!npc.isRemoved()) {
+                        cNPC_EpicFight_Addon$updateModelCap();
+                    }
+                });
+            } else {
+                cNPC_EpicFight_Addon$updateModelCap();
+                // GUI-save / direct-sync path: entity is already live on the server.
+                // Push the updated EF patch to clients so living/weapon motions apply immediately.
+                if (!npc.level().isClientSide() && npc.isAddedToWorld()) {
+                    npc.updateClient();
+                }
+            }
             if (npc.isKilled()) {
                 LivingEntityPatch<?> patch = EpicFightCapabilities.getEntityPatch(npc, LivingEntityPatch.class);
                 if (patch != null) {
@@ -95,5 +116,19 @@ public class MixinDataDisplay implements IDataDisplay {
                         .setCaps(newCaps);
             }
         } // TODO remove one
+    }
+
+    @Unique
+    private boolean cNPC_EpicFight_Addon$isClientReadingSpawnData() {
+        if (!npc.level().isClientSide()) {
+            return false;
+        }
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+            if ("noppes.npcs.entity.EntityNPCInterface".equals(element.getClassName())
+                    && "readSpawnData".equals(element.getMethodName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

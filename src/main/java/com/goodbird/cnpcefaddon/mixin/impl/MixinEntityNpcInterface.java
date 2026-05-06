@@ -30,6 +30,11 @@ public class MixinEntityNpcInterface extends PathfinderMob {
             }
             ((HumanoidMobPatch<?>) patch)
                     .setAIAsInfantry(AdvNpcHumanoidPatch.cNPC_EpicFight_Addon$hasNativeRangedWeaponForEpicFight(this));
+            // World-load path: after deferred onJoinWorld completes, sync the finalized
+            // EF patch to the client so living/weapon motions are applied correctly.
+            if (!this.level().isClientSide()) {
+                ((EntityNPCInterface)(Object)this).updateClient();
+            }
         }
     }
 }

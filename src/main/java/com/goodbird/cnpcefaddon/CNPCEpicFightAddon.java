@@ -1,5 +1,6 @@
 package com.goodbird.cnpcefaddon;
 
+import com.goodbird.cnpcefaddon.common.AdvNpcPatchReloader;
 import com.goodbird.cnpcefaddon.common.NpcPatchReloadListener;
 import com.goodbird.cnpcefaddon.common.network.NetworkHandler;
 import com.goodbird.cnpcefaddon.common.network.SPDatapackSync;
@@ -16,16 +17,14 @@ import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import yesman.epicfight.network.EpicFightNetworkManager;
 import yesman.epicfight.world.entity.ai.attribute.EpicFightAttributes;
 import noppes.npcs.CustomEntities;
-
-import java.util.Objects;
-import java.util.stream.Stream;
 
 @Mod(CNPCEpicFightAddon.MODID)
 public class CNPCEpicFightAddon {
     public static final String MODID = "cnpcefaddon";
+    public static final String INDESTRUCTIBLE_MODID = "indestructible";
+    public static final String EFI_UNOFFICIAL_MODID = "efi_unofficial";
 
     public CNPCEpicFightAddon() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -41,6 +40,13 @@ public class CNPCEpicFightAddon {
 
     private void reloadListenerEvent(AddReloadListenerEvent event) {
         event.addListener(new NpcPatchReloadListener());
+        if (isIndestructibleCompatLoaded()) {
+            event.addListener(new AdvNpcPatchReloader());
+        }
+    }
+
+    public static boolean isIndestructibleCompatLoaded() {
+        return ModList.get().isLoaded(INDESTRUCTIBLE_MODID) || ModList.get().isLoaded(EFI_UNOFFICIAL_MODID);
     }
 
     private void onDatapackSync(OnDatapackSyncEvent event) {

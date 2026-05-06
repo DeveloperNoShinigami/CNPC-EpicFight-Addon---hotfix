@@ -10,11 +10,13 @@
     "MixinCapabilityProvider",
     "MixinClientConfig",
     "MixinDataDisplay",
+    "MixinEntityAIRangedAttack",
     "MixinEntityLivingWrapper",
     "MixinEntityNpcInterface",
     "MixinNPCWrapper"
   ],
   "client": [
+    "MixinGuiCreationExtra",
     "IMixinRenderEngine",
     "MixinGuiCreationEntities",
     "MixinLayerHeadwear",

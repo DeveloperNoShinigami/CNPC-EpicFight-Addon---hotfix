@@ -1,10 +1,9 @@
 package com.goodbird.cnpcefaddon.mixin.impl;
 
+import com.goodbird.cnpcefaddon.common.patch.AdvNpcHumanoidPatch;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.ProjectileWeaponItem;
 import noppes.npcs.entity.EntityNPCInterface;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,8 +24,12 @@ public class MixinEntityNpcInterface extends PathfinderMob {
     public void addRegularEntries(CallbackInfo ci) {
         LivingEntityPatch<?> patch = EpicFightCapabilities.getEntityPatch(this, LivingEntityPatch.class);
         if (patch instanceof HumanoidMobPatch) {
+            Object humanoidPatch = patch;
+            if (humanoidPatch instanceof AdvNpcHumanoidPatch<?>) {
+                ((AdvNpcHumanoidPatch<?>) humanoidPatch).cNPC_EpicFight_Addon$completeDeferredServerJoinInitialization();
+            }
             ((HumanoidMobPatch<?>) patch)
-                    .setAIAsInfantry(((LivingEntity) this).getMainHandItem().getItem() instanceof ProjectileWeaponItem);
+                    .setAIAsInfantry(AdvNpcHumanoidPatch.cNPC_EpicFight_Addon$hasNativeRangedWeaponForEpicFight(this));
         }
     }
 }

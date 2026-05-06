@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run CNPC EF Client",
+			"type": "shell",
+			"command": "./gradlew",
+			"args": [
+				"runClient"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

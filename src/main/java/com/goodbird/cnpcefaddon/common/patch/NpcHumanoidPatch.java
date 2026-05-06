@@ -1,14 +1,9 @@
 package com.goodbird.cnpcefaddon.common.patch;
 
 import com.goodbird.cnpcefaddon.common.provider.NpcHumanoidPatchProvider;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.PathfinderMob;
-import net.minecraft.world.item.ItemStack;
 import noppes.npcs.entity.EntityNPCInterface;
-import yesman.epicfight.api.model.Armature;
 import yesman.epicfight.api.utils.math.OpenMatrix4f;
-import yesman.epicfight.gameasset.Armatures;
-import yesman.epicfight.main.EpicFightSharedConstants;
 import yesman.epicfight.model.armature.HumanoidArmature;
 import yesman.epicfight.world.capabilities.entitypatch.CustomHumanoidMobPatch;
 import yesman.epicfight.world.capabilities.entitypatch.Faction;
@@ -27,13 +22,21 @@ public class NpcHumanoidPatch<T extends PathfinderMob> extends CustomHumanoidMob
         this.armature = provider.armature.deepCopy();
     }
 
+    @Override
+    public HumanoidArmature getArmature() {
+        return (HumanoidArmature) this.armature;
+    }
+
+    @Override
     public OpenMatrix4f getModelMatrix(float partialTicks) {
-        float scale = ((EntityNPCInterface) original).display.getSize() / 5f;
+        float scale = ((EntityNPCInterface) this.original).display.getSize() / 5.0F;
         return super.getModelMatrix(partialTicks).scale(scale, scale, scale);
     }
 
     @Override
-    public HumanoidArmature getArmature() {
-        return (HumanoidArmature) this.armature;
+    public void updateMotion(boolean considerInaction) {
+        // Let the base humanoid patch resolve living motions from held-item capability
+        // and humanoid_weapon_motions instead of forcing ranged-only logic.
+        super.updateMotion(considerInaction);
     }
 }

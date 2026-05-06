@@ -49,7 +49,9 @@ minecraft {
     runs {
         client {
             workingDirectory project.file('run')
-            arg "-mixin.config=cnpcefaddon.mixins.json"
+
+            // Cap the dev client heap explicitly instead of relying on JVM ergonomics.
+            jvmArgs '-Xms1G', '-Xmx4G'
 
             // Recommended logging data for a userdev environment
             property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
@@ -66,7 +68,6 @@ minecraft {
 
         server {
             workingDirectory project.file('run')
-            arg "-mixin.config=cnpcefaddon.mixins.json"
 
             // Recommended logging data for a userdev environment
             property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
@@ -111,7 +112,6 @@ minecraft {
 
         data {
             workingDirectory project.file('run')
-            arg "-mixin.config=cnpcefaddon.mixins.json"
 
             // Recommended logging data for a userdev environment
             property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
@@ -137,6 +137,12 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 repositories {
     // Put repositories for dependencies here
     // ForgeGradle automatically adds the Forge maven and Maven Central for you
+    maven {
+        url = 'https://cursemaven.com'
+        content {
+            includeGroup 'curse.maven'
+        }
+    }
 
     // If you have mod jar dependencies in ./libs, you can declare them as a repository like so:
     flatDir {
@@ -148,11 +154,28 @@ dependencies {
     // Specify the version of Minecraft to use, If this is any group other then 'net.minecraft' it is assumed
     // that the dep is a ForgeGradle 'patcher' dependency. And it's patches will be applied.
     // The userdev artifact is a special name and will get all sorts of transformations applied to it.
-    minecraft 'net.minecraftforge:forge:1.20.1-47.2.20'
+    minecraft 'net.minecraftforge:forge:1.20.1-47.4.0'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
-    implementation fg.deobf('lib:CustomNPCs:1.20.1-GBPort-Unofficial-20251031')
-    implementation fg.deobf('lib:epic-fight:20.14.10-mc1.20.1-forge')
-    // implementation fg.deobf('lib:indestructible:20.6.7')
+    // Compile against external mod APIs, but do not package them into this addon jar.
+    implementation fg.deobf("curse.maven:customnpcs-unofficial-1052708:7694841")
+    compileOnly fg.deobf("curse.maven:epic-fight-mod-405076:7919289")
+    runtimeOnly fg.deobf("curse.maven:epic-fight-mod-405076:7919289")
+
+    compileOnly fg.deobf('lib:EFI-Unofficial:20.14.16')
+    // runtimeOnly fg.deobf('lib:EFI-Unofficial:20.14.16')
+    // implementation fg.deobf('lib:epic_arsenal:1.0.1')
+
+    // compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:7745481")
+    
+    // for testing datapacks
+    // implementation fg.deobf("curse.maven:epicfight-nightfall-1307848:7891764")
+    // implementation fg.deobf("curse.maven:epic-fight-avalon-1268823:7619938")
+    // implementation fg.deobf("curse.maven:epic-fight-invincible-1184379:7679941")
+    
+    //Reference only
+    //compileOnly fg.deobf("")
+    //runtimeOnly fg.deobf("")
+
     //compile group: 'com.h2database', name: 'h2', version: '1.4.200'
     //extraLibs group: 'com.h2database', name: 'h2', version: '1.4.200'
     //configurations.compile.extendsFrom(configurations.extraLibs)
@@ -195,6 +218,7 @@ jar {
 
 mixin {
     add sourceSets.main, "cnpcefaddon.refmap.json"
+    config "cnpcefaddon.mixins.json"
 }
 
 jar.finalizedBy('reobfJar')

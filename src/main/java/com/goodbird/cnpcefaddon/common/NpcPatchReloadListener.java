@@ -1,6 +1,8 @@
 package com.goodbird.cnpcefaddon.common;
 
+import com.goodbird.cnpcefaddon.CNPCEpicFightAddon;
 import com.goodbird.cnpcefaddon.common.provider.NpcPatchProvider;
+import com.goodbird.cnpcefaddon.common.compatibility.IndestructibleCompat;
 import com.goodbird.cnpcefaddon.client.render.RenderStorage;
 import com.goodbird.cnpcefaddon.common.network.SPDatapackSync;
 import com.goodbird.cnpcefaddon.common.patch.INpcPatch;
@@ -167,6 +169,9 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
 
     @OnlyIn(Dist.CLIENT)
     public static void processServerPacket(SPDatapackSync packet) {
+        branchPatchProvider = new NpcBranchPatchProvider();
+        AVAILABLE_MODELS = new HashSet<>();
+        TAGMAP = Maps.newHashMap();
         // Register HumanoidArmature as default for CustomNPCs (each NPC can override via unique armature)
         Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, Armatures.BIPED);
         for (CompoundTag tag : packet.getTags()) {
@@ -175,20 +180,12 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
                 disabled = tag.getBoolean("disabled");
             ResourceLocation key = new ResourceLocation(tag.getString("id"));
             MobPatchReloadListener.AbstractMobPatchProvider provider = null;
-            /*
-             * if (tag.getString("patchType").equals("ADVANCED")) {
-             * try {
-             * provider = (MobPatchReloadListener.AbstractMobPatchProvider) Class
-             * .forName("com.goodbird.cnpcefaddon.common.AdvNpcPatchReloader")
-             * .getMethod("deserializeMobPatchProvider", CompoundTag.class, boolean.class)
-             * .invoke(null, tag, false);
-             * } catch (Exception e) {
-             * 
-             * }
-             * } else {
-             */
-            provider = deserializeMobPatchProvider(tag, false);
-            // }
+            if ("ADVANCED".equals(tag.getString("patchType")) && IndestructibleCompat.isAvailable()) {
+                provider = IndestructibleCompat.deserializeAdvancedNpcPatchProvider(tag, false,
+                        Minecraft.getInstance().getResourceManager());
+            } else {
+                provider = deserializeMobPatchProvider(tag, false);
+            }
 
             branchPatchProvider.addProvider(key, provider);
             AVAILABLE_MODELS.add(key);

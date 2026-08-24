@@ -44,13 +44,19 @@ A compatibility bridge between CustomNPCs and EpicFight
 [[dependencies.cnpcefaddon]]
     modId="customnpcs"
     mandatory=true
-    versionRange="[0,)"
+    versionRange="[1.20.1.20260711,)"
+    ordering="AFTER"
+    side="BOTH"
+[[dependencies.cnpcefaddon]]
+    modId="epicfight"
+    mandatory=true
+    versionRange="[20.14.17,)"
     ordering="AFTER"
     side="BOTH"
 [[dependencies.cnpcefaddon]]
     modId="indestructible"
     mandatory=true
-    versionRange="[20.14.16,)"
+    versionRange="[20.14.17,)"
     ordering="AFTER"
     side="BOTH"
 [[dependencies.cnpcefaddon]]

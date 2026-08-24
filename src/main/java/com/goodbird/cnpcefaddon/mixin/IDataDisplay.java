@@ -10,4 +10,7 @@ public interface IDataDisplay {
     ResourceLocation getEFModel();
 
     boolean hasEFModel();
+
+    /** Re-evaluates the CNPC Epic Fight provider after script-persistent NBT changes. */
+    void refreshEFPatch();
 }

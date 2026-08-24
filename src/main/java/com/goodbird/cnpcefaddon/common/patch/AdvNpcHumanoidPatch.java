@@ -1,8 +1,10 @@
 package com.goodbird.cnpcefaddon.common.patch;
 
 import com.goodbird.cnpcefaddon.common.provider.AdvNpcPatchProvider;
+import com.goodbird.cnpcefaddon.common.compatibility.CnpcEpicFightCombatBridge;
 import com.nameless.indestructible.world.capability.AdvancedCustomHumanoidMobPatch;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ProjectileWeaponItem;
@@ -14,12 +16,15 @@ import yesman.epicfight.world.capabilities.item.WeaponCategory;
 import yesman.epicfight.api.utils.math.OpenMatrix4f;
 import yesman.epicfight.model.armature.HumanoidArmature;
 import yesman.epicfight.world.capabilities.entitypatch.Faction;
+import yesman.epicfight.world.damagesource.EpicFightDamageSources;
+import yesman.epicfight.world.damagesource.StunType;
 
 import java.util.Map;
 
 public class AdvNpcHumanoidPatch<T extends PathfinderMob> extends AdvancedCustomHumanoidMobPatch<T> implements INpcPatch {
     private final AdvNpcPatchProvider provider;
     private boolean cNPC_EpicFight_Addon$pendingServerJoinInitialization;
+    private boolean cNPC_EpicFight_Addon$nativeMeleeDamage;
 
     public AdvNpcHumanoidPatch(Faction faction, AdvNpcPatchProvider provider) {
         super(faction, provider);
@@ -117,6 +122,38 @@ public class AdvNpcHumanoidPatch<T extends PathfinderMob> extends AdvancedCustom
                 || this.cNPC_EpicFight_Addon$hasAdvancedRangedContractForHand(net.minecraft.world.InteractionHand.OFF_HAND);
     }
 
+    public void cNPC_EpicFight_Addon$resyncHeldItemFromCnpc() {
+        this.forceWeaponMotionResync();
+    }
+
+    public void cNPC_EpicFight_Addon$beginNativeMeleeDamage() {
+        if (this.epicFightDamageSource == null) {
+            this.epicFightDamageSource = EpicFightDamageSources.mobAttack(this.original)
+                    .setUsedItem(this.original.getMainHandItem())
+                    .setBaseImpact(this.getImpact(net.minecraft.world.InteractionHand.MAIN_HAND))
+                    .setStunType(StunType.SHORT);
+            this.cNPC_EpicFight_Addon$nativeMeleeDamage = true;
+        }
+    }
+
+    public void cNPC_EpicFight_Addon$endNativeMeleeDamage() {
+        if (this.cNPC_EpicFight_Addon$nativeMeleeDamage) {
+            this.epicFightDamageSource = null;
+            this.cNPC_EpicFight_Addon$nativeMeleeDamage = false;
+        }
+    }
+
+    @Override
+    public boolean isTargetInvulnerable(Entity target) {
+        if (CnpcEpicFightCombatBridge.cnpcFactionBlocks(this.original, target)) {
+            return true;
+        }
+        if (CnpcEpicFightCombatBridge.cnpcFactionAllows(this.original, target)) {
+            return false;
+        }
+        return super.isTargetInvulnerable(target);
+    }
+
     private boolean cNPC_EpicFight_Addon$hasAdvancedRangedContractForHand(net.minecraft.world.InteractionHand hand) {
         if (this.original == null || this.provider.getHumanoidCombatBehaviors() == null) {
             return false;
@@ -128,7 +165,8 @@ public class AdvNpcHumanoidPatch<T extends PathfinderMob> extends AdvancedCustom
         }
 
         WeaponCategory weaponCategory = this.getResolvedWeaponCategory(hand);
-        if (weaponCategory != CapabilityItem.WeaponCategories.RANGED) {
+        if (weaponCategory != CapabilityItem.WeaponCategories.BOW
+                && weaponCategory != CapabilityItem.WeaponCategories.CROSSBOW) {
             return false;
         }
 

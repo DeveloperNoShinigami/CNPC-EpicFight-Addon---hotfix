@@ -9,7 +9,8 @@
         "armor_negation": 0.0,
         "max_strikes": 1,
         "chasing_speed": 0.7,
-                "scale": 1.0
+        "scale": 1.0,
+        "max_stun_shield": 0.0
     },
     "default_livingmotions": {
         "idle": "epicfight:biped/living/idle",
@@ -19,35 +20,6 @@
                 "fall": "epicfight:biped/living/fall",
         "death": "epicfight:biped/living/death"
     },
-    "humanoid_weapon_motions": [
-        {
-            "weapon_categories": ["spear", "sword", "longsword", "dagger", "fist", "ranged", "not_weapon"],
-            "style": "one_hand",
-            "livingmotions": {
-                "idle": "epicfight:biped/living/idle",
-                "walk": "epicfight:biped/living/walk",
-                "chase": "epicfight:biped/living/walk"
-            }
-        },
-        {
-            "weapon_categories": ["spear", "sword", "longsword", "dagger"],
-            "style": "two_hand",
-            "livingmotions": {
-                "idle": "epicfight:biped/living/idle",
-                "walk": "epicfight:biped/living/walk",
-                "chase": "epicfight:biped/living/walk"
-            }
-        },
-        {
-            "weapon_categories": ["tachi", "uchigatana", "greatsword", "axe", "trident", "shield", "ranged"],
-            "style": "common",
-            "livingmotions": {
-                "idle": "epicfight:biped/living/idle",
-                "walk": "epicfight:biped/living/walk",
-                "chase": "epicfight:biped/living/walk"
-            }
-        }
-    ],
     "stun_animations": {
         "short": "epicfight:biped/combat/hit_short",
         "long": "epicfight:biped/combat/hit_long",
@@ -1428,7 +1400,7 @@
            ]
       },
 {
-            "weapon_categories": ["fist", "ranged", "not_weapon"],
+            "weapon_categories": ["fist", "bow", "crossbow", "not_weapon"],
             "style": "one_hand",
             "behavior_series": [
 {
@@ -1680,7 +1652,7 @@
            ]
    },
 {
-            "weapon_categories": ["ranged"],
+            "weapon_categories": ["bow", "crossbow"],
             "style": "common",
             "behavior_series": [
 {

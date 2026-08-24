@@ -4,6 +4,7 @@ import com.goodbird.cnpcefaddon.common.AdvNpcPatchReloader;
 import com.goodbird.cnpcefaddon.common.NpcPatchReloadListener;
 import com.goodbird.cnpcefaddon.common.network.NetworkHandler;
 import com.goodbird.cnpcefaddon.common.network.SPDatapackSync;
+import com.mojang.logging.LogUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
@@ -19,12 +20,14 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import yesman.epicfight.world.entity.ai.attribute.EpicFightAttributes;
 import noppes.npcs.CustomEntities;
+import org.slf4j.Logger;
 
 @Mod(CNPCEpicFightAddon.MODID)
 public class CNPCEpicFightAddon {
     public static final String MODID = "cnpcefaddon";
     public static final String INDESTRUCTIBLE_MODID = "indestructible";
     public static final String EFI_UNOFFICIAL_MODID = "efi_unofficial";
+    public static final Logger LOGGER = LogUtils.getLogger();
 
     public CNPCEpicFightAddon() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();

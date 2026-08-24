@@ -31,6 +31,8 @@ public class NetworkHandler {
 
         index = 0;
         CHANNEL.registerMessage(index++, SPDatapackSync.class, SPDatapackSync::toBytes, SPDatapackSync::fromBytes, SPDatapackSync::handle);
+        CHANNEL.registerMessage(index++, SPNpcPatchSelection.class, SPNpcPatchSelection::toBytes,
+                SPNpcPatchSelection::fromBytes, SPNpcPatchSelection::handle);
     }
 
     public static <MSG> void send(ServerPlayer player, MSG msg) {

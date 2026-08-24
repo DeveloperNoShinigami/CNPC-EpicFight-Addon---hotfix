@@ -64,7 +64,13 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
 
     protected void apply(Map<ResourceLocation, JsonElement> objectIn, ResourceManager resourceManagerIn,
             ProfilerFiller profilerIn) {
-        branchPatchProvider = new NpcBranchPatchProvider();
+        // The advanced listener may run before this listener. Do not discard
+        // its providers: both directories are one logical CNPC provider table.
+        // The normal entries below replace their own keys, while advanced
+        // entries remain available for NBT-selected CNPCs.
+        if (branchPatchProvider == null || !branchPatchProvider.hasProviders()) {
+            branchPatchProvider = new NpcBranchPatchProvider();
+        }
         AVAILABLE_MODELS = new HashSet<>();
         TAGMAP = Maps.newHashMap();
         // Register HumanoidArmature as default for CustomNPCs (each NPC can override via unique armature)
@@ -77,16 +83,25 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
                 e.printStackTrace();
             }
             branchPatchProvider.addProvider(entry.getKey(), deserializeMobPatchProvider(tag, false));
+            if (tag.contains("nbt_tag")) {
+                try {
+                    branchPatchProvider.addNbtProvider(entry.getKey(),
+                            TagParser.parseTag(tag.getString("nbt_tag")),
+                            deserializeMobPatchProvider(tag, false));
+                } catch (CommandSyntaxException e) {
+                    CNPCEpicFightAddon.LOGGER.error("Invalid CNPC nbt_tag for {}", entry.getKey(), e);
+                }
+            }
             AVAILABLE_MODELS.add(entry.getKey());
             CompoundTag filteredTag = MobPatchReloadListener.filterClientData(tag);
             filteredTag.putString("patchType", "NORMAL");
             TAGMAP.put(entry.getKey(), filteredTag);
-            EntityPatchProvider.putCustomEntityPatch(CustomEntities.entityCustomNpc,
-                    entity -> () -> branchPatchProvider.get(entity));
+            bindEntityPatchProvider();
             if (EpicFightSharedConstants.isPhysicalClient())
                 RenderStorage.registerRenderer(entry.getKey(),
                         tag.contains("preset") ? tag.getString("preset") : tag.getString("renderer"));
         }
+        CNPCEpicFightAddon.LOGGER.info("Loaded CNPC Epic Fight mobpatch JSON files: {}", objectIn.size());
     }
 
     public static MobPatchReloadListener.AbstractMobPatchProvider deserializeMobPatchProvider(CompoundTag tag,
@@ -167,6 +182,28 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
         return tagStream;
     }
 
+    /**
+     * CNPCs have their own one-to-many selector and must win over EFI's
+     * entity-type fallback registration for the CustomNPC entity type.
+     * Generic Minecraft mobs continue using EFI's universal dispatcher.
+     */
+    public static void bindEntityPatchProvider() {
+        EntityPatchProvider.putCustomEntityPatch(CustomEntities.entityCustomNpc,
+                entity -> () -> branchPatchProvider.get(entity));
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    public static void applyClientSelection(int entityId, ResourceLocation selectedKey) {
+        branchPatchProvider.applyClientSelection(entityId, selectedKey);
+        if (Minecraft.getInstance().level != null) {
+            Entity entity = Minecraft.getInstance().level.getEntity(entityId);
+            if (entity instanceof noppes.npcs.entity.EntityNPCInterface npc
+                    && npc.display instanceof com.goodbird.cnpcefaddon.mixin.IDataDisplay display) {
+                display.refreshEFPatch();
+            }
+        }
+    }
+
     @OnlyIn(Dist.CLIENT)
     public static void processServerPacket(SPDatapackSync packet) {
         branchPatchProvider = new NpcBranchPatchProvider();
@@ -188,9 +225,15 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
             }
 
             branchPatchProvider.addProvider(key, provider);
+            if (tag.contains("nbt_tag")) {
+                try {
+                    branchPatchProvider.addNbtProvider(key, TagParser.parseTag(tag.getString("nbt_tag")), provider);
+                } catch (CommandSyntaxException e) {
+                    CNPCEpicFightAddon.LOGGER.error("Invalid synced CNPC nbt_tag for {}", key, e);
+                }
+            }
             AVAILABLE_MODELS.add(key);
-            EntityPatchProvider.putCustomEntityPatch(CustomEntities.entityCustomNpc,
-                    entity -> () -> branchPatchProvider.get(entity));
+            bindEntityPatchProvider();
             if (!disabled) {
                 if (tag.contains("preset")) {
                     // Armatures.registerEntityTypeArmature(entityType, tag.getString("preset"));
@@ -210,6 +253,19 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
                 // Note: CustomNPCs have individual armatures set via setArmature(), no global registration needed
                 RenderStorage.registerRenderer(key,
                         tag.contains("preset") ? tag.getString("preset") : tag.getString("renderer"));
+            }
+        }
+
+        // The server may send the entity selection packet before this
+        // datapack payload. Refresh already-spawned CNPCs after all providers
+        // and armatures exist so a standard customnpc.json patch cannot remain
+        // on the old client capability/animation state.
+        if (Minecraft.getInstance().level != null) {
+            for (Entity entity : Minecraft.getInstance().level.entitiesForRendering()) {
+                if (entity instanceof noppes.npcs.entity.EntityNPCInterface npc
+                        && npc.display instanceof com.goodbird.cnpcefaddon.mixin.IDataDisplay display) {
+                    display.refreshEFPatch();
+                }
             }
         }
     }

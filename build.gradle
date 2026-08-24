@@ -157,20 +157,35 @@ dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.4.0'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     // Compile against external mod APIs, but do not package them into this addon jar.
-    implementation fg.deobf("curse.maven:customnpcs-unofficial-1052708:7694841")
-    compileOnly fg.deobf("curse.maven:epic-fight-mod-405076:7919289")
-    runtimeOnly fg.deobf("curse.maven:epic-fight-mod-405076:7919289")
+    // CustomNPCs-Unofficial 1.20.1.20260711 (CurseForge file 8414335)
+    implementation fg.deobf("curse.maven:customnpcs-unofficial-1052708:8414335")
+    // Epic Fight 20.14.17 for 1.20.1 (CurseForge file 8049910)
+    compileOnly fg.deobf("curse.maven:epic-fight-mod-405076:8049910")
+    runtimeOnly fg.deobf("curse.maven:epic-fight-mod-405076:8049910")
 
-    compileOnly fg.deobf('lib:EFI-Unofficial:20.14.16')
-    // runtimeOnly fg.deobf('lib:EFI-Unofficial:20.14.16')
-    // implementation fg.deobf('lib:epic_arsenal:1.0.1')
+compileOnly fg.deobf('lib:EFI-Unofficial:20.14.17')
+runtimeOnly fg.deobf('lib:EFI-Unofficial:20.14.17')
+    // Epic Arsenal is the TACZ/Epic Fight gun animation bridge. It must be
+    // loaded through ForgeGradle's deobf path; putting the production jar
+    // directly in run/mods causes obfuscated method linkage failures in the
+    // development runtime.
+    runtimeOnly fg.deobf('lib:epic_arsenal:1.0.1')
 
-    // compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:7745481")
+    // TaCZ 1.20.1-1.1.8-hotfix (CurseForge file 8141310), loaded from Maven for integration tests.
+    compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
+    runtimeOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
     
-    // for testing datapacks
-    // implementation fg.deobf("curse.maven:epicfight-nightfall-1307848:7891764")
-    // implementation fg.deobf("curse.maven:epic-fight-avalon-1268823:7619938")
-    // implementation fg.deobf("curse.maven:epic-fight-invincible-1184379:7679941")
+    // Nightfall and its mandatory Avalon/Invincible dependencies are disabled for
+    // the compatibility test profile. Nightfall 3.4.1 calls a client config value
+    // from its server-side animation tick, which caused the dedicated server crash
+    // recorded in run/crash-reports/crash-2026-08-23_16.19.09-server.txt.
+    // CurseForge reference: epicfight-nightfall file 8693642.
+
+    // Packet Fixer 2.0.0 for Forge 1.19-1.20.1 (CurseForge file 6195870).
+    // Load on both sides during the integration test to handle oversized and
+    // malformed packet edge cases exposed by the expanded animation stack.
+    runtimeOnly fg.deobf("curse.maven:packet-fixer-689467:6195870")
+
     
     //Reference only
     //compileOnly fg.deobf("")

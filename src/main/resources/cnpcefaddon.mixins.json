@@ -13,6 +13,7 @@
     "MixinEntityAIRangedAttack",
     "MixinEntityLivingWrapper",
     "MixinEntityNpcInterface",
+    "MixinEntityMovementStepHeight",
     "MixinNPCWrapper"
   ],
   "client": [

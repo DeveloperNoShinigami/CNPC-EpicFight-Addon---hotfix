@@ -1,5 +1,19 @@
 # CNPC EpicFight Addon — Changelog
 
+## [Final compatibility build] — 2026-08-23
+
+### Fixed
+- CNPC equipment is authoritative and is re-synchronized into Epic Fight after attacks, reloads, swaps, patch refreshes, and world/entity reloads.
+- Multiple CNPCs and generic mobs can share one NBT-selected patch; matching is universal and updates at runtime.
+- CNPC and Epic Fight provider replacement no longer loses the selected armature, held item, living motions, or client animation state.
+- NPC-to-NPC Epic Fight melee damage now reaches the normal damage/stun pipeline while CNPC faction relationships remain respected.
+- TACZ aiming is sustained through the firing cycle, uses the gun's current cadence, and reloads both with and without a target.
+- Skeleton and other mob patch refreshes no longer mutate AI goal lists during iteration and crash the server.
+
+### Verified
+- Epic Fight 20.14.17, CustomNPCs 1.20.1.20260711, TACZ 1.1.8-hotfix, Epic Arsenal, and Packet Fixer on Forge 47.4.0 / Minecraft 1.20.1.
+- Native held-item Epic Fight living motions, ranged aim/shot/reload, guard, stun, knockdown, fall, and neutralize behavior.
+
 ## [Unreleased / hotfix] — 2026-05-06
 
 ### Fixed

@@ -1,5 +1,6 @@
 package com.goodbird.cnpcefaddon.common;
 
+import com.goodbird.cnpcefaddon.CNPCEpicFightAddon;
 import com.goodbird.cnpcefaddon.client.render.RenderStorage;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -40,19 +41,28 @@ public class AdvNpcPatchReloader extends SimpleJsonResourceReloadListener {
 
 			NpcPatchReloadListener.branchPatchProvider.addProvider(entry.getKey(),
 					com.goodbird.cnpcefaddon.common.compatibility.IndestructibleCompat.deserializeAdvancedNpcPatchProvider(tag, false, resourceManagerIn));
+			if (tag.contains("nbt_tag")) {
+				try {
+					CompoundTag matcher = TagParser.parseTag(tag.getString("nbt_tag"));
+					NpcPatchReloadListener.branchPatchProvider.addNbtProvider(entry.getKey(), matcher,
+							com.goodbird.cnpcefaddon.common.compatibility.IndestructibleCompat.deserializeAdvancedNpcPatchProvider(tag, false, resourceManagerIn));
+				} catch (CommandSyntaxException e) {
+					CNPCEpicFightAddon.LOGGER.error("Invalid CNPC nbt_tag for {}", entry.getKey(), e);
+				}
+			}
 			NpcPatchReloadListener.AVAILABLE_MODELS.add(entry.getKey());
 
 			CompoundTag filteredTag = com.goodbird.cnpcefaddon.common.compatibility.IndestructibleCompat.filterClientData(tag);
 			filteredTag.putString("patchType", "ADVANCED");
 			NpcPatchReloadListener.TAGMAP.put(entry.getKey(), filteredTag);
 
-			EntityPatchProvider.putCustomEntityPatch(CustomEntities.entityCustomNpc,
-					entity -> () -> NpcPatchReloadListener.branchPatchProvider.get(entity));
+			NpcPatchReloadListener.bindEntityPatchProvider();
 
 			if (EpicFightSharedConstants.isPhysicalClient()) {
 				RenderStorage.registerRenderer(entry.getKey(),
 						tag.contains("preset") ? tag.getString("preset") : tag.getString("renderer"));
 			}
 		}
+		CNPCEpicFightAddon.LOGGER.info("Loaded advanced CNPC Epic Fight mobpatch JSON files: {}", objectIn.size());
 	}
 }

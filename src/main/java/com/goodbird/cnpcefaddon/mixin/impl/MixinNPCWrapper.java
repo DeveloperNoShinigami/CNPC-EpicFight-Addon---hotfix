@@ -17,7 +17,12 @@ public abstract class MixinNPCWrapper<T extends EntityNPCInterface> extends Enti
 
     @Unique
     public void setEFModel(String modelPath){
-        ((IDataDisplay)entity.display).setEFModel(new ResourceLocation(modelPath));
+        IDataDisplay display = (IDataDisplay)entity.display;
+        if (modelPath == null || modelPath.isBlank()) {
+            display.clearEFModel();
+        } else {
+            display.setEFModel(new ResourceLocation(modelPath));
+        }
     }
 
     /**
@@ -26,7 +31,23 @@ public abstract class MixinNPCWrapper<T extends EntityNPCInterface> extends Enti
      */
     @Unique
     public void setEFNbtMarker(String key, String value) {
-        entity.getPersistentData().putString(key, value);
+        if (key == null || key.isBlank()) {
+            return;
+        }
+        if (value == null) {
+            entity.getPersistentData().remove(key);
+        } else {
+            entity.getPersistentData().putString(key, value);
+        }
         ((IDataDisplay) entity.display).refreshEFPatch();
+    }
+
+    /** Removes a ForgeData marker and immediately restores the next selector. */
+    @Unique
+    public void removeEFNbtMarker(String key) {
+        if (key != null && !key.isBlank()) {
+            entity.getPersistentData().remove(key);
+            ((IDataDisplay) entity.display).refreshEFPatch();
+        }
     }
 }

@@ -7,6 +7,10 @@ public interface IDataDisplay {
         setEFModel(modelPath, true);
     }
     void setEFModel(ResourceLocation modelPath, boolean server);
+
+    default void clearEFModel() {
+        setEFModel(null, true);
+    }
     ResourceLocation getEFModel();
 
     boolean hasEFModel();

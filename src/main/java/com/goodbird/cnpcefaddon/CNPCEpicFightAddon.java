@@ -12,6 +12,7 @@ import net.minecraftforge.event.entity.EntityAttributeModificationEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.AddReloadListenerEvent;
 import net.minecraftforge.event.OnDatapackSyncEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.Logging;
 import net.minecraftforge.fml.ModList;
@@ -35,6 +36,7 @@ public class CNPCEpicFightAddon {
         bus.addListener(this::onEntityAttributeModification);
         MinecraftForge.EVENT_BUS.addListener(this::reloadListenerEvent);
         MinecraftForge.EVENT_BUS.addListener(this::onDatapackSync);
+        MinecraftForge.EVENT_BUS.addListener(this::onStartTracking);
     }
 
     private void doCommonStuff(FMLCommonSetupEvent event) {
@@ -59,15 +61,32 @@ public class CNPCEpicFightAddon {
             mobPatchPacket.write(tag);
         }
         if (player != null) {
-            if (!player.getServer().isSingleplayerOwner(player.getGameProfile())) {
-                NetworkHandler.send(player, mobPatchPacket);
-            }
+            NetworkHandler.send(player, mobPatchPacket);
         } else {
             event.getPlayerList().getPlayers().forEach((serverPlayer) -> {
                 NetworkHandler.send(serverPlayer, mobPatchPacket);
             });
         }
 
+    }
+
+    /**
+     * A CNPC can begin tracking after its initial server tick.  Resend the
+     * server-authoritative per-entity selection directly to that player so
+     * the client cannot remain on its vanilla/fallback provider.
+     */
+    private void onStartTracking(PlayerEvent.StartTracking event) {
+        if (!(event.getTarget() instanceof noppes.npcs.entity.EntityNPCInterface npc)
+                || !(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        net.minecraft.resources.ResourceLocation selected =
+                NpcPatchReloadListener.resolveServerSelection(npc);
+        NetworkHandler.send(player,
+                new com.goodbird.cnpcefaddon.common.network.SPNpcPatchSelection(
+                        npc.getId(), selected, selected != null));
+        LOGGER.info("[CNPC EFI diagnostic] tracking sync: player={} entity={} selectedKey={}",
+                player.getGameProfile().getName(), npc.getId(), selected);
     }
 
     private void onEntityAttributeModification(EntityAttributeModificationEvent event) {

@@ -1,5 +1,6 @@
 package com.goodbird.cnpcefaddon.common.compatibility;
 
+import com.goodbird.cnpcefaddon.CNPCEpicFightAddon;
 import com.goodbird.cnpcefaddon.common.patch.AdvNpcHumanoidPatch;
 import com.goodbird.cnpcefaddon.common.patch.NpcHumanoidPatch;
 import net.minecraft.world.entity.Entity;
@@ -15,6 +16,12 @@ import yesman.epicfight.world.damagesource.StunType;
 
 /** Shared bridge for CNPC lifecycle, faction, and native melee integration. */
 public final class CnpcEpicFightCombatBridge {
+    public enum AttackHandling {
+        NOT_HANDLED,
+        HANDLED_NO_DAMAGE,
+        HANDLED_DAMAGE
+    }
+
     private static final ThreadLocal<Boolean> ROUTING_NATIVE_ATTACK = ThreadLocal.withInitial(() -> false);
 
     private CnpcEpicFightCombatBridge() {}
@@ -33,6 +40,22 @@ public final class CnpcEpicFightCombatBridge {
         } else if (patch instanceof NpcHumanoidPatch<?> humanoid) {
             humanoid.cNPC_EpicFight_Addon$resyncHeldItemFromCnpc();
         }
+    }
+
+    /**
+     * CNPC's display update rebuilds the client patch and animator. Send the
+     * final held-item motion map after that update instead of immediately
+     * before it, or the client discards the map it just received.
+     */
+    public static void resyncAfterClientUpdate(EntityNPCInterface npc) {
+        if (npc.level().isClientSide() || npc.getServer() == null) {
+            return;
+        }
+        npc.getServer().execute(() -> {
+            if (!npc.isRemoved() && npc.isAlive()) {
+                resync(npc);
+            }
+        });
     }
 
     public static void beginNativeMelee(EntityNPCInterface npc) {
@@ -59,18 +82,37 @@ public final class CnpcEpicFightCombatBridge {
      * surrounding it with a cached source cannot carry stun metadata.
      */
     public static boolean attackWithEpicFight(EntityNPCInterface attacker, Entity target) {
+        return tryAttackWithEpicFight(attacker, target) != AttackHandling.NOT_HANDLED;
+    }
+
+    /**
+     * Returns whether Epic Fight owned the swing separately from whether the
+     * hit dealt damage. CNPC must not fall back to its vanilla attack after an
+     * Epic Fight miss, block, or invulnerability result.
+     */
+    public static AttackHandling tryAttackWithEpicFight(EntityNPCInterface attacker, Entity target) {
         if (ROUTING_NATIVE_ATTACK.get()) {
-            return false;
+            return AttackHandling.NOT_HANDLED;
         }
         LivingEntityPatch<?> patch = EpicFightCapabilities.getEntityPatch(attacker, LivingEntityPatch.class);
         if (!(patch instanceof AdvNpcHumanoidPatch<?>) && !(patch instanceof NpcHumanoidPatch<?>)) {
-            return false;
+            return AttackHandling.NOT_HANDLED;
         }
 
         EpicFightDamageSource source = EpicFightDamageSources.mobAttack(attacker)
                 .setUsedItem(attacker.getMainHandItem())
                 .setBaseImpact(patch.getImpact(InteractionHand.MAIN_HAND))
                 .setStunType(StunType.SHORT);
+        boolean animationDispatched = false;
+        if (patch instanceof AdvNpcHumanoidPatch<?> advanced) {
+            animationDispatched = advanced.triggerConfiguredAttackAnimation();
+        } else if (patch instanceof NpcHumanoidPatch<?> normal) {
+            animationDispatched = normal.cNPC_EpicFight_Addon$triggerConfiguredAttackAnimation();
+        }
+        CNPCEpicFightAddon.LOGGER.debug(
+                "[CNPC EFI diagnostic] native melee animation dispatch: entity={} patch={} dispatched={} item={}",
+                attacker.getId(), patch.getClass().getSimpleName(), animationDispatched,
+                attacker.getMainHandItem().getItem());
         AttackResult result;
         ROUTING_NATIVE_ATTACK.set(true);
         try {
@@ -78,7 +120,12 @@ public final class CnpcEpicFightCombatBridge {
         } finally {
             ROUTING_NATIVE_ATTACK.set(false);
         }
-        return result.resultType.dealtDamage();
+        AttackHandling handling = result.resultType.dealtDamage()
+                ? AttackHandling.HANDLED_DAMAGE : AttackHandling.HANDLED_NO_DAMAGE;
+        com.goodbird.cnpcefaddon.CNPCEpicFightAddon.LOGGER.info(
+                "[CNPC EFI] melee ownership entity={} target={} handling={} source=EpicFightDamageSource stun={} item={}",
+                attacker.getId(), target.getId(), handling, source.getStunType(), attacker.getMainHandItem());
+        return handling;
     }
 
     public static boolean isRoutingNativeAttack() {
@@ -88,7 +135,7 @@ public final class CnpcEpicFightCombatBridge {
     public static DamageSource replaceActiveEpicFightSource(Entity victim, DamageSource incoming) {
         if (incoming instanceof EpicFightDamageSource) return incoming;
         Entity attacker = incoming.getDirectEntity() != null ? incoming.getDirectEntity() : incoming.getEntity();
-        if (attacker != null) {
+        if (attacker instanceof EntityNPCInterface) {
             LivingEntityPatch<?> patch = EpicFightCapabilities.getEntityPatch(attacker, LivingEntityPatch.class);
             EpicFightDamageSource active = patch == null ? null : patch.getEpicFightDamageSource();
             if (active != null && active.getDirectEntity() == attacker) {

@@ -10,9 +10,11 @@
     "MixinCapabilityProvider",
     "MixinClientConfig",
     "MixinDataDisplay",
+    "MixinDataScript",
     "MixinEntityAIRangedAttack",
     "MixinEntityLivingWrapper",
     "MixinEntityNpcInterface",
+    "MixinLivingEntity",
     "MixinEntityMovementStepHeight",
     "MixinNPCWrapper"
   ],

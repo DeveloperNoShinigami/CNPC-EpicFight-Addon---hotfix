@@ -1,8 +1,10 @@
 package com.goodbird.cnpcefaddon.common.patch;
 
 import com.goodbird.cnpcefaddon.common.provider.AdvNpcPatchProvider;
-import com.goodbird.cnpcefaddon.common.compatibility.CnpcEpicFightCombatBridge;
+import com.goodbird.cnpcefaddon.common.compatibility.CnpcFactionBridge;
 import com.nameless.indestructible.world.capability.AdvancedCustomHumanoidMobPatch;
+import com.nameless.indestructible.world.capability.EpicArsenalMobMotionBridge;
+import com.nameless.indestructible.world.capability.TaczCompat;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PathfinderMob;
@@ -102,7 +104,11 @@ public class AdvNpcHumanoidPatch<T extends PathfinderMob> extends AdvancedCustom
     }
 
     private static boolean cNPC_EpicFight_Addon$isNativeRangedWeaponForEpicFight(ItemStack stack) {
-        return stack.getItem() instanceof ProjectileWeaponItem;
+        // TACZ guns are not ProjectileWeaponItem instances, but they are
+        // still ranged weapons for Epic Fight's infantry setup. Leaving them
+        // classified as melee makes the base AI add guard/chase behavior that
+        // competes with the advanced aim/shoot behavior.
+        return stack.getItem() instanceof ProjectileWeaponItem || TaczCompat.isTaczGun(stack);
     }
 
     public static boolean cNPC_EpicFight_Addon$shouldSuppressNativeRangedAi(LivingEntity entity) {
@@ -123,7 +129,11 @@ public class AdvNpcHumanoidPatch<T extends PathfinderMob> extends AdvancedCustom
     }
 
     public void cNPC_EpicFight_Addon$resyncHeldItemFromCnpc() {
-        this.forceWeaponMotionResync();
+        // Equipment events must refresh only the held-item motion map. The
+        // EFI force-resync helper also rebuilds combat AI, which resets the
+        // active goal and makes ranged CNPCs spin or lose their aim.
+        this.refreshWeaponMotionMap();
+        EpicArsenalMobMotionBridge.resyncNativeGunMotions(this);
     }
 
     public void cNPC_EpicFight_Addon$beginNativeMeleeDamage() {
@@ -145,10 +155,11 @@ public class AdvNpcHumanoidPatch<T extends PathfinderMob> extends AdvancedCustom
 
     @Override
     public boolean isTargetInvulnerable(Entity target) {
-        if (CnpcEpicFightCombatBridge.cnpcFactionBlocks(this.original, target)) {
+        CnpcFactionBridge.Relation relation = CnpcFactionBridge.relation(this.original, target);
+        if (relation == CnpcFactionBridge.Relation.ALLIED) {
             return true;
         }
-        if (CnpcEpicFightCombatBridge.cnpcFactionAllows(this.original, target)) {
+        if (relation == CnpcFactionBridge.Relation.HOSTILE) {
             return false;
         }
         return super.isTargetInvulnerable(target);

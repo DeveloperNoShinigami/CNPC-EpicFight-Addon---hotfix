@@ -55,8 +55,27 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
     private static final Gson GSON = (new GsonBuilder()).create();
 
     public static NpcBranchPatchProvider branchPatchProvider = new NpcBranchPatchProvider();
+    private static volatile NpcBranchPatchProvider clientBranchPatchProvider = new NpcBranchPatchProvider();
     public static Set<ResourceLocation> AVAILABLE_MODELS = new HashSet<>();
     public static Map<ResourceLocation, CompoundTag> TAGMAP = Maps.newHashMap();
+    private static volatile boolean CLIENT_DATA_READY;
+    /**
+     * Selection packets may arrive before the client has deserialized the
+     * synced tables. Keep this field in the common class on both physical
+     * sides: Forge's dist cleaner can remove an {@code @OnlyIn} field while
+     * the common reload listener is being initialized on the server, which
+     * leaves the client-only packet methods with a stale field reference and
+     * causes {@code NoSuchFieldError} during datapack reload.
+     */
+    private static final Set<Integer> CLIENT_REFRESH_PENDING = new HashSet<>();
+    /**
+     * Server-authoritative selections must survive replacement of the client
+     * provider during datapack synchronization.  The provider itself is
+     * intentionally replaceable, so keeping this state on the provider made
+     * an otherwise valid selection disappear during reload/login ordering.
+     */
+    private static final Map<Integer, ResourceLocation> CLIENT_AUTHORITATIVE_SELECTIONS = Maps.newHashMap();
+    private static final Set<Integer> CLIENT_AUTHORITATIVE_SELECTION_KNOWN = new HashSet<>();
 
     public NpcPatchReloadListener() {
         super(GSON, "npc_epicfight_mobpatch");
@@ -64,13 +83,11 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
 
     protected void apply(Map<ResourceLocation, JsonElement> objectIn, ResourceManager resourceManagerIn,
             ProfilerFiller profilerIn) {
-        // The advanced listener may run before this listener. Do not discard
-        // its providers: both directories are one logical CNPC provider table.
-        // The normal entries below replace their own keys, while advanced
-        // entries remain available for NBT-selected CNPCs.
-        if (branchPatchProvider == null || !branchPatchProvider.hasProviders()) {
-            branchPatchProvider = new NpcBranchPatchProvider();
-        }
+        // This listener is registered before AdvNpcPatchReloader. Start one
+        // fresh shared table here; the advanced listener appends its providers
+        // and TAGMAP entries immediately afterward. The resulting table is
+        // what the server sends to clients during datapack synchronization.
+        branchPatchProvider = new NpcBranchPatchProvider();
         AVAILABLE_MODELS = new HashSet<>();
         TAGMAP = Maps.newHashMap();
         // Register HumanoidArmature as default for CustomNPCs (each NPC can override via unique armature)
@@ -96,7 +113,6 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
             CompoundTag filteredTag = MobPatchReloadListener.filterClientData(tag);
             filteredTag.putString("patchType", "NORMAL");
             TAGMAP.put(entry.getKey(), filteredTag);
-            bindEntityPatchProvider();
             if (EpicFightSharedConstants.isPhysicalClient())
                 RenderStorage.registerRenderer(entry.getKey(),
                         tag.contains("preset") ? tag.getString("preset") : tag.getString("renderer"));
@@ -188,13 +204,34 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
      * Generic Minecraft mobs continue using EFI's universal dispatcher.
      */
     public static void bindEntityPatchProvider() {
+        bindEntityPatchProvider(branchPatchProvider);
+    }
+
+    public static void bindEntityPatchProvider(NpcBranchPatchProvider provider) {
         EntityPatchProvider.putCustomEntityPatch(CustomEntities.entityCustomNpc,
-                entity -> () -> branchPatchProvider.get(entity));
+                entity -> () -> provider.get(entity));
+    }
+
+    public static NpcBranchPatchProvider providerFor(Entity entity) {
+        return entity.level().isClientSide() ? clientBranchPatchProvider : branchPatchProvider;
     }
 
     @OnlyIn(Dist.CLIENT)
     public static void applyClientSelection(int entityId, ResourceLocation selectedKey) {
-        branchPatchProvider.applyClientSelection(entityId, selectedKey);
+        CLIENT_AUTHORITATIVE_SELECTION_KNOWN.add(entityId);
+        if (selectedKey == null) {
+            CLIENT_AUTHORITATIVE_SELECTIONS.remove(entityId);
+        } else {
+            CLIENT_AUTHORITATIVE_SELECTIONS.put(entityId, selectedKey);
+        }
+        clientBranchPatchProvider.applyClientSelection(entityId, selectedKey);
+        if (!CLIENT_DATA_READY) {
+            CLIENT_REFRESH_PENDING.add(entityId);
+            CNPCEpicFightAddon.LOGGER.info(
+                    "[CNPC EFI diagnostic] client selection queued until datapack sync: entityId={} selectedKey={}",
+                    entityId, selectedKey);
+            return;
+        }
         if (Minecraft.getInstance().level != null) {
             Entity entity = Minecraft.getInstance().level.getEntity(entityId);
             if (entity instanceof noppes.npcs.entity.EntityNPCInterface npc
@@ -204,11 +241,19 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
         }
     }
 
+    public static boolean isClientDataReady() {
+        return CLIENT_DATA_READY;
+    }
+
     @OnlyIn(Dist.CLIENT)
     public static void processServerPacket(SPDatapackSync packet) {
-        branchPatchProvider = new NpcBranchPatchProvider();
+        CLIENT_DATA_READY = false;
+        NpcBranchPatchProvider synchronizedProvider = new NpcBranchPatchProvider();
+        clientBranchPatchProvider = synchronizedProvider;
         AVAILABLE_MODELS = new HashSet<>();
         TAGMAP = Maps.newHashMap();
+        int normalEntries = 0;
+        int advancedEntries = 0;
         // Register HumanoidArmature as default for CustomNPCs (each NPC can override via unique armature)
         Armatures.registerEntityTypeArmature(CustomEntities.entityCustomNpc, Armatures.BIPED);
         for (CompoundTag tag : packet.getTags()) {
@@ -218,22 +263,24 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
             ResourceLocation key = new ResourceLocation(tag.getString("id"));
             MobPatchReloadListener.AbstractMobPatchProvider provider = null;
             if ("ADVANCED".equals(tag.getString("patchType")) && IndestructibleCompat.isAvailable()) {
+                advancedEntries++;
                 provider = IndestructibleCompat.deserializeAdvancedNpcPatchProvider(tag, false,
                         Minecraft.getInstance().getResourceManager());
             } else {
+                normalEntries++;
                 provider = deserializeMobPatchProvider(tag, false);
             }
 
-            branchPatchProvider.addProvider(key, provider);
+            synchronizedProvider.addProvider(key, provider);
             if (tag.contains("nbt_tag")) {
                 try {
-                    branchPatchProvider.addNbtProvider(key, TagParser.parseTag(tag.getString("nbt_tag")), provider);
+                    synchronizedProvider.addNbtProvider(key, TagParser.parseTag(tag.getString("nbt_tag")), provider);
                 } catch (CommandSyntaxException e) {
                     CNPCEpicFightAddon.LOGGER.error("Invalid synced CNPC nbt_tag for {}", key, e);
                 }
             }
             AVAILABLE_MODELS.add(key);
-            bindEntityPatchProvider();
+            bindEntityPatchProvider(synchronizedProvider);
             if (!disabled) {
                 if (tag.contains("preset")) {
                     // Armatures.registerEntityTypeArmature(entityType, tag.getString("preset"));
@@ -256,6 +303,19 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
             }
         }
 
+        // All normal and advanced providers are now complete. Existing
+        // entities can safely be rebuilt from either category.
+        CLIENT_DATA_READY = true;
+        // Re-apply selections received before or during the datapack sync.
+        // processServerPacket replaces the provider instance, so selections
+        // stored only on the old instance would otherwise be lost.
+        for (Integer entityId : CLIENT_AUTHORITATIVE_SELECTION_KNOWN) {
+            synchronizedProvider.applyClientSelection(entityId,
+                    CLIENT_AUTHORITATIVE_SELECTIONS.get(entityId));
+        }
+        Set<Integer> pendingRefreshes = new HashSet<>(CLIENT_REFRESH_PENDING);
+        CLIENT_REFRESH_PENDING.clear();
+
         // The server may send the entity selection packet before this
         // datapack payload. Refresh already-spawned CNPCs after all providers
         // and armatures exist so a standard customnpc.json patch cannot remain
@@ -267,7 +327,25 @@ public class NpcPatchReloadListener extends SimpleJsonResourceReloadListener {
                     display.refreshEFPatch();
                 }
             }
+            for (Integer entityId : pendingRefreshes) {
+                Entity entity = Minecraft.getInstance().level.getEntity(entityId);
+                if (entity instanceof noppes.npcs.entity.EntityNPCInterface npc
+                        && npc.display instanceof com.goodbird.cnpcefaddon.mixin.IDataDisplay display) {
+                    display.refreshEFPatch();
+                }
+            }
         }
+        CNPCEpicFightAddon.LOGGER.info(
+                "Synchronized CNPC Epic Fight client patch data: {} entries (normal={}, advanced={})",
+                packet.getTags().length, normalEntries, advancedEntries);
+    }
+
+    /** Server-side selection lookup used when a player begins tracking a CNPC. */
+    public static ResourceLocation resolveServerSelection(Entity entity) {
+        if (entity.level().isClientSide() || !(entity instanceof noppes.npcs.entity.EntityNPCInterface)) {
+            return null;
+        }
+        return branchPatchProvider.resolveSelectedKey(entity);
     }
 }
 

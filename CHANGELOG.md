@@ -1,5 +1,12 @@
 # CNPC EpicFight Addon — Changelog
 
+## 2026-09-05 — Production compatibility polish
+
+### Fixed
+- CNPCs now follow EFI's finalized ranged firing band and native held-gun patrol motion behavior.
+- NBT-selected and manually configured CNPC patches retain the same equipment, animation, aim, and shooting synchronization.
+- Generic mobs and CNPCs use the same maintain-distance behavior through EFI.
+
 ## [Final compatibility build] — 2026-08-23
 
 ### Fixed

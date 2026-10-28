@@ -21,9 +21,9 @@ public class MixinRenderEngine {
     public void getEntityRenderer(Entity entity, CallbackInfoReturnable<PatchedEntityRenderer> cir) {
         if(entity instanceof EntityNPCInterface npc){
             IDataDisplay dataDisplay = (IDataDisplay) npc.display;
-            ResourceLocation selectedKey = NpcPatchReloadListener.branchPatchProvider == null
+            ResourceLocation selectedKey = NpcPatchReloadListener.providerFor(npc) == null
                     ? (dataDisplay.hasEFModel() ? dataDisplay.getEFModel() : null)
-                    : NpcPatchReloadListener.branchPatchProvider.resolveSelectedKey(npc);
+                    : NpcPatchReloadListener.providerFor(npc).resolveSelectedKey(npc);
             if(selectedKey != null){
                 PatchedEntityRenderer renderer = RenderStorage.renderersMap.get(selectedKey);
                 if (renderer != null) {
@@ -37,9 +37,9 @@ public class MixinRenderEngine {
     public void hasRendererFor(Entity entity, CallbackInfoReturnable<Boolean> cir) {
         if(entity instanceof EntityNPCInterface npc){
             IDataDisplay dataDisplay = (IDataDisplay) npc.display;
-            ResourceLocation selectedKey = NpcPatchReloadListener.branchPatchProvider == null
+            ResourceLocation selectedKey = NpcPatchReloadListener.providerFor(npc) == null
                     ? (dataDisplay.hasEFModel() ? dataDisplay.getEFModel() : null)
-                    : NpcPatchReloadListener.branchPatchProvider.resolveSelectedKey(npc);
+                    : NpcPatchReloadListener.providerFor(npc).resolveSelectedKey(npc);
             if(selectedKey != null && RenderStorage.renderersMap.containsKey(selectedKey)){
                 cir.setReturnValue(true);
             }

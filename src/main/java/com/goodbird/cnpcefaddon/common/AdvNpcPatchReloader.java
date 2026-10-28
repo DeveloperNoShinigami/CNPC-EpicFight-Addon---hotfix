@@ -56,8 +56,6 @@ public class AdvNpcPatchReloader extends SimpleJsonResourceReloadListener {
 			filteredTag.putString("patchType", "ADVANCED");
 			NpcPatchReloadListener.TAGMAP.put(entry.getKey(), filteredTag);
 
-			NpcPatchReloadListener.bindEntityPatchProvider();
-
 			if (EpicFightSharedConstants.isPhysicalClient()) {
 				RenderStorage.registerRenderer(entry.getKey(),
 						tag.contains("preset") ? tag.getString("preset") : tag.getString("renderer"));

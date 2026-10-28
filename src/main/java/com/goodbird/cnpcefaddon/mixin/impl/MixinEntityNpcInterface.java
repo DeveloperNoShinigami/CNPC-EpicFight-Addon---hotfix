@@ -1,6 +1,7 @@
 package com.goodbird.cnpcefaddon.mixin.impl;
 
 import com.goodbird.cnpcefaddon.common.patch.AdvNpcHumanoidPatch;
+import com.goodbird.cnpcefaddon.common.patch.NpcHumanoidPatch;
 import com.goodbird.cnpcefaddon.common.compatibility.CnpcEquipmentBridge;
 import com.goodbird.cnpcefaddon.common.compatibility.CnpcEpicFightCombatBridge;
 import com.goodbird.cnpcefaddon.common.NpcPatchReloadListener;
@@ -10,12 +11,15 @@ import com.goodbird.cnpcefaddon.common.network.SPNpcPatchSelection;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.Level;
 import noppes.npcs.entity.EntityNPCInterface;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -27,6 +31,11 @@ import yesman.epicfight.world.capabilities.entitypatch.LivingEntityPatch;
 
 @Mixin(EntityNPCInterface.class)
 public class MixinEntityNpcInterface extends PathfinderMob {
+
+    @Unique
+    private boolean cnpcefaddon$scriptStateInitialized;
+    @Unique
+    private boolean cnpcefaddon$lastScriptEnabled;
 
     protected MixinEntityNpcInterface(EntityType<? extends PathfinderMob> p_21683_, Level p_21684_) {
         super(p_21683_, p_21684_);
@@ -48,52 +57,95 @@ public class MixinEntityNpcInterface extends PathfinderMob {
                 HumanoidMobPatch<?> humanoid = (HumanoidMobPatch<?>) patch;
                 this.level().getServer().execute(() -> {
                     if (!this.isRemoved() && this.isAlive()) {
-                        humanoid.setAIAsInfantry(
-                                AdvNpcHumanoidPatch.cNPC_EpicFight_Addon$hasNativeRangedWeaponForEpicFight(this));
+                        if (humanoid instanceof NpcHumanoidPatch<?> normal) {
+                            normal.cNPC_EpicFight_Addon$ensureEpicFightCombatGoal();
+                        } else {
+                            humanoid.setAIAsInfantry(
+                                    AdvNpcHumanoidPatch.cNPC_EpicFight_Addon$hasNativeRangedWeaponForEpicFight(this));
+                        }
                     }
                 });
             }
-            // World-load path: after deferred onJoinWorld completes, sync the finalized
-            // EF patch to the client so living/weapon motions are applied correctly.
-            if (!this.level().isClientSide()) {
-                ((EntityNPCInterface)(Object)this).updateClient();
-            }
+            // The CNPC callback can run more than once while its display data is
+            // rebuilt. Do not call updateClient() here: that callback causes a
+            // new display read, which used to create a refresh/draw loop.
+            // Explicit display/configuration changes perform the client update.
         }
     }
 
-    @Inject(method = "tick", at = @At("TAIL"), remap = false)
+    // tick is inherited from Minecraft's mapped entity hierarchy.  Leaving
+    // remap=false here makes this hook dev-only: the production jar exposes
+    // the obfuscated method name, so the refresh/equipment bridge never runs.
+    @Inject(method = "tick", at = @At("TAIL"))
     private void cnpcefaddon$syncAuthoritativeEquipment(CallbackInfo ci) {
         if (!this.level().isClientSide()) {
             EntityNPCInterface npc = (EntityNPCInterface) (Object) this;
-            boolean selectionChanged = NpcPatchReloadListener.branchPatchProvider != null
-                    && NpcPatchReloadListener.branchPatchProvider.observeSelection(npc);
-            if (selectionChanged && npc.display instanceof IDataDisplay display) {
+            boolean scriptEnabled = npc.script != null && npc.script.getEnabled();
+            // The first tick is initialization, not a configuration change.
+            // Refreshing here immediately after patch construction rebuilt the
+            // provider/AI and put TACZ back into draw state on every spawn.
+            boolean scriptStateChanged = cnpcefaddon$scriptStateInitialized
+                    && cnpcefaddon$lastScriptEnabled != scriptEnabled;
+            cnpcefaddon$scriptStateInitialized = true;
+            cnpcefaddon$lastScriptEnabled = scriptEnabled;
+            boolean selectionChanged = NpcPatchReloadListener.providerFor(npc) != null
+                    && NpcPatchReloadListener.providerFor(npc).observeSelection(npc);
+            if (selectionChanged || scriptStateChanged) {
+                com.goodbird.cnpcefaddon.CNPCEpicFightAddon.LOGGER.info(
+                        "[CNPC EFI diagnostic] server refresh trigger: entity={} selectionChanged={} scriptStateChanged={} scriptEnabled={}",
+                        npc.getId(), selectionChanged, scriptStateChanged, scriptEnabled);
+            }
+            if ((selectionChanged || scriptStateChanged) && npc.display instanceof IDataDisplay display) {
                 display.refreshEFPatch();
-                ResourceLocation selectedKey = NpcPatchReloadListener.branchPatchProvider.resolveSelectedKey(npc);
+                ResourceLocation selectedKey = NpcPatchReloadListener.providerFor(npc).resolveSelectedKey(npc);
                 NetworkHandler.sendNearby(npc, new SPNpcPatchSelection(npc.getId(), selectedKey, selectedKey != null));
             }
-            if (CnpcEquipmentBridge.observe(npc)) {
-                CnpcEpicFightCombatBridge.resync(npc);
-                npc.updateClient();
-            }
+            // Equipment synchronization is event-driven below. The normal
+            // tick path intentionally does not refresh the patch, serialize
+            // CNPC display data, or redraw TACZ: runtime ammo/cooldown/draw
+            // state must never be mistaken for a weapon swap.
         }
     }
 
-    @Inject(method = "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z", at = @At("HEAD"), remap = false, cancellable = true)
+    /**
+     * CNPC equipment changes enter the vanilla entity equipment boundary.
+     * Refresh once here, after the new stack is installed, instead of polling
+     * and rebuilding the provider during every combat tick.
+     */
+    @Inject(method = "setItemSlot(Lnet/minecraft/world/entity/EquipmentSlot;Lnet/minecraft/world/item/ItemStack;)V", at = @At("TAIL"))
+    private void cnpcefaddon$equipmentChanged(EquipmentSlot slot, ItemStack stack, CallbackInfo ci) {
+        if (this.level().isClientSide() || !CnpcEquipmentBridge.observeEquipmentEvent((EntityNPCInterface) (Object) this)) {
+            return;
+        }
+        EntityNPCInterface npc = (EntityNPCInterface) (Object) this;
+        if (npc.isAddedToWorld() && npc.isAlive()) {
+            // CNPC/TACZ already owns equipment packet synchronization. Do not
+            // serialize DataDisplay here: its marker payload contains runtime
+            // shot state and would rebuild the entire provider on the client.
+            // A real hand change only needs the held-item motion map rebuilt.
+            CnpcEpicFightCombatBridge.resync(npc);
+        }
+    }
+
+    // doHurtTarget is also a mapped Minecraft method inherited by CNPC.  It
+    // must be remapped for the production runtime or native CNPC attacks
+    // bypass the Epic Fight animation/damage lifecycle.
+    @Inject(method = "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z", at = @At("HEAD"), cancellable = true)
     private void cnpcefaddon$beginNativeEpicFightMelee(Entity target, CallbackInfoReturnable<Boolean> cir) {
         if (!this.level().isClientSide() && !CnpcEpicFightCombatBridge.isRoutingNativeAttack()) {
-            if (CnpcEpicFightCombatBridge.attackWithEpicFight((EntityNPCInterface) (Object) this, target)) {
+            if (CnpcEpicFightCombatBridge.tryAttackWithEpicFight((EntityNPCInterface) (Object) this, target)
+                    != CnpcEpicFightCombatBridge.AttackHandling.NOT_HANDLED) {
                 cir.setReturnValue(true);
             }
         }
     }
 
-    @ModifyVariable(method = "hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z", at = @At("HEAD"), argsOnly = true, ordinal = 0, remap = false)
+    @ModifyVariable(method = "hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z", at = @At("HEAD"), argsOnly = true, ordinal = 0)
     private DamageSource cnpcefaddon$useActiveEpicFightSource(DamageSource incoming) {
         return CnpcEpicFightCombatBridge.replaceActiveEpicFightSource((Entity) (Object) this, incoming);
     }
 
-    @Inject(method = "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z", at = @At("RETURN"), remap = false)
+    @Inject(method = "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z", at = @At("RETURN"))
     private void cnpcefaddon$endNativeEpicFightMelee(Entity target, CallbackInfoReturnable<Boolean> cir) {
         if (!this.level().isClientSide()) {
             CnpcEpicFightCombatBridge.endNativeMelee((EntityNPCInterface) (Object) this);

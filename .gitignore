@@ -20,6 +20,7 @@ build
 !gradlew
 !gradlew.bat
 !build.gradle
+.tmp/
 
 # other
 eclipse
@@ -30,3 +31,5 @@ docs/
 !src/*
 logs/
 source_code/
+Colosseum_5999820.schematic
+lib/CNPC-EpicFight-Addon-*.jar
